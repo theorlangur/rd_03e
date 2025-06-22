@@ -3,6 +3,7 @@
 
 #include <zephyr/kernel.h>
 #include "lib_ret_err.h"
+#include <lib_formatter.hpp>
 #include <expected>
 
 namespace uart

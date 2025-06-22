@@ -56,6 +56,4 @@ namespace std{
     if (auto err = f; err != 0) \
         return std::unexpected(Err{location, err})
 
-#define FMT_PRINT(...) 
-
 #endif

@@ -1,9 +1,11 @@
 #ifndef LIB_RD03E_H_
 #define LIB_RD03E_H_
 
+#include "lib_misc_helpers.hpp"
 #include "lib_uart.h"
 #include <span>
 #include "lib_uart_primitives.h"
+#include <lib_type_traits.hpp>
 
 namespace ai_thinker
 {
@@ -458,7 +460,7 @@ private:
             if (retry != kMaxRetry)
             {
                 /*if (m_dbg)*/ FMT_PRINT("Sending command {:x} retry: {}\n", uint16_t(cmd), (kMaxRetry - retry));
-                std::this_thread::sleep_for(kDefaultWait); 
+                k_sleep(Z_TIMEOUT_MS(kDefaultWait));
             }
             TRY_UART_COMM_CMD_WITH_RETRY(Flush(), "SendCommandV2", ErrorCode::SendCommand_Failed);
             if (m_dbg) FMT_PRINT("Sent cmd {}\n", uint16_t(cmd));
@@ -515,65 +517,72 @@ public:
     bool m_dbg = false;
 };
 
+
+inline bool operator&(RD03E::TargetState s1, RD03E::TargetState s2)
+{
+    return (uint8_t(s1) & uint8_t(s2)) != 0;
+}
+}
+
 template<>
-struct tools::formatter_t<RD03E::Err>
+struct tools::formatter_t<ai_thinker::RD03E::Err>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::Err const& e)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::Err const& e)
     {
-        return tools::format_to(std::forward<Dest>(dst), "Err\\{uart=[{}] at {} with {} }", e.uartErr, e.pLocation, RD03E::err_to_str(e.code));
+        return tools::format_to(std::forward<Dest>(dst), "Err\\{uart=[{}] at {} with {} }", e.uartErr, e.pLocation, ai_thinker::RD03E::err_to_str(e.code));
     }
 };
 
 template<>
-struct tools::formatter_t<RD03E::CmdErr>
+struct tools::formatter_t<ai_thinker::RD03E::CmdErr>
 {
     template<FormatDestination Dest>
-        static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::CmdErr const& e)
+        static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::CmdErr const& e)
         {
             return tools::format_to(std::forward<Dest>(dst), "CmdErr\\{{Err=[{}]; return={} }", e.e, e.returnCode);
         }
 };
 
 template<>
-struct tools::formatter_t<RD03E::TargetState>
+struct tools::formatter_t<ai_thinker::RD03E::TargetState>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::TargetState const& p)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::TargetState const& p)
     {
         const char *pStr = "<unk>";
         switch(p)
         {
-            case RD03E::TargetState::Clear: pStr = "Clear"; break;
-            case RD03E::TargetState::Still: pStr = "Still"; break;
-            case RD03E::TargetState::Move: pStr = "Move"; break;
-            case RD03E::TargetState::MoveAndStill: pStr = "MoveAndStill"; break;
+            case ai_thinker::RD03E::TargetState::Clear: pStr = "Clear"; break;
+            case ai_thinker::RD03E::TargetState::Still: pStr = "Still"; break;
+            case ai_thinker::RD03E::TargetState::Move: pStr = "Move"; break;
+            case ai_thinker::RD03E::TargetState::MoveAndStill: pStr = "MoveAndStill"; break;
         }
         return tools::format_to(std::forward<Dest>(dst), "{}", pStr);
     }
 };
 
 template<>
-struct tools::formatter_t<RD03E::SystemMode>
+struct tools::formatter_t<ai_thinker::RD03E::SystemMode>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::SystemMode const& p)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::SystemMode const& p)
     {
         const char *pStr = "<unk>";
         switch(p)
         {
-            case RD03E::SystemMode::Simple: pStr = "Simple"; break;
-            case RD03E::SystemMode::Energy: pStr = "Energy"; break;
+            case ai_thinker::RD03E::SystemMode::Simple: pStr = "Simple"; break;
+            case ai_thinker::RD03E::SystemMode::Energy: pStr = "Energy"; break;
         }
         return tools::format_to(std::forward<Dest>(dst), "{}", pStr);
     }
 };
 
 template<>
-struct tools::formatter_t<RD03E::PresenceResult>
+struct tools::formatter_t<ai_thinker::RD03E::PresenceResult>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::PresenceResult const& p)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::PresenceResult const& p)
     {
         return tools::format_to(std::forward<Dest>(dst), "[{}; move(dist={}cm; energy={}); still(dist={}cm; energy={})]"
                 , p.m_State
@@ -584,10 +593,10 @@ struct tools::formatter_t<RD03E::PresenceResult>
 };
 
 template<>
-struct tools::formatter_t<RD03E::Engeneering>
+struct tools::formatter_t<ai_thinker::RD03E::Engeneering>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::Engeneering const& p)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::Engeneering const& p)
     {
         return tools::format_to(std::forward<Dest>(dst), 
                 "Max Move Gate:{} Max Still Gate:{}\n"
@@ -603,18 +612,12 @@ struct tools::formatter_t<RD03E::Engeneering>
 };
 
 template<>
-struct tools::formatter_t<RD03E::Version>
+struct tools::formatter_t<ai_thinker::RD03E::Version>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, RD03E::Version const& v)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::Version const& v)
     {
         return tools::format_to(std::forward<Dest>(dst), "v{}.{}.{}" , v.m_Major, v.m_Minor, v.m_Misc);
     }
 };
-
-inline bool operator&(RD03E::TargetState s1, RD03E::TargetState s2)
-{
-    return (uint8_t(s1) & uint8_t(s2)) != 0;
-}
-}
 #endif
