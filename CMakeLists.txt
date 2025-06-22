@@ -12,3 +12,4 @@ add_subdirectory(src/lib)
 
 target_link_libraries(app PRIVATE c stdc++ supc++)
 target_compile_options(app PRIVATE -fmacro-backtrace-limit=0)
+target_compile_options(app PRIVATE -D__cpp_concepts=202002L -Wno-builtin-macro-redefined -Wno-invalid-offsetof)
