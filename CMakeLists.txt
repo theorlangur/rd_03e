@@ -8,5 +8,7 @@ find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(presence_rd_03e)
 
 target_sources(app PRIVATE src/main.cpp)
+add_subdirectory(src/lib)
+
 target_link_libraries(app PRIVATE c stdc++ supc++)
 target_compile_options(app PRIVATE -fmacro-backtrace-limit=0)

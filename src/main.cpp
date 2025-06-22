@@ -10,6 +10,7 @@
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
 #include <zephyr/drivers/sensor/ait_rd_03e.h>
+#include "lib/lib_uart.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   5000
@@ -29,6 +30,7 @@ constinit const struct device *rd_uart = nullptr;
 int main(void)
 {
 	rd_uart = rd03e_dbg_uart(rd03e);
+	uart::Channel ch(rd_uart);
 	int ret;
 	bool led_state = true;
 
