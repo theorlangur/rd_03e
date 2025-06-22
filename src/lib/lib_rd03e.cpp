@@ -74,12 +74,13 @@ namespace ai_thinker
 
     RD03E::ExpectedResult RD03E::SwitchBluetooth(bool on)
     {
+        using namespace uart::primitives;
         SetDefaultWait(kDefaultWait);
         TRY_UART_COMM(OpenCommandMode(), "SwitchBluetooth", ErrorCode::BTFailed);
         TRY_UART_COMM(SendCommandV2(Cmd::SwitchBluetooth, to_send(uint16_t(on)), to_recv()), "SwitchBluetooth", ErrorCode::BTFailed);
         TRY_UART_COMM(SendFrameV2(Cmd::Restart), "SwitchBluetooth", ErrorCode::BTFailed);
         k_sleep(Z_TIMEOUT_MS(1000));
-        TRY_UART_COMM(uart::primitives::flush_and_wait(*this, kRestartTimeout), "SwitchBluetooth", ErrorCode::BTFailed);
+        TRY_UART_COMM(flush_and_wait(*this, kRestartTimeout), "SwitchBluetooth", ErrorCode::BTFailed);
         if (m_Mode != SystemMode::Simple)
         {
             auto rs = ChangeConfiguration().SetSystemMode(m_Mode).EndChange();
@@ -90,11 +91,12 @@ namespace ai_thinker
 
     RD03E::ExpectedResult RD03E::Restart()
     {
+        using namespace uart::primitives;
         SetDefaultWait(kDefaultWait);
         TRY_UART_COMM(OpenCommandMode(), "Restart", ErrorCode::RestartFailed);
         TRY_UART_COMM(SendFrameV2(Cmd::Restart), "Restart", ErrorCode::RestartFailed);
         k_sleep(Z_TIMEOUT_MS(1000));
-        TRY_UART_COMM(uart::primitives::flush_and_wait(*this, kRestartTimeout), "Restart", ErrorCode::RestartFailed);
+        TRY_UART_COMM(flush_and_wait(*this, kRestartTimeout), "Restart", ErrorCode::RestartFailed);
         if (m_Mode != SystemMode::Simple)
         {
             auto rs = ChangeConfiguration().SetSystemMode(m_Mode).EndChange();
@@ -105,12 +107,13 @@ namespace ai_thinker
 
     RD03E::ExpectedResult RD03E::FactoryReset()
     {
+        using namespace uart::primitives;
         SetDefaultWait(duration_ms_t(1000));
         TRY_UART_COMM(OpenCommandMode(), "FactoryReset", ErrorCode::FactoryResetFailed);
         TRY_UART_COMM(SendCommandV2(Cmd::FactoryReset, to_send(), to_recv()), "FactoryReset", ErrorCode::FactoryResetFailed);
         TRY_UART_COMM(SendFrameV2(Cmd::Restart), "FactoryReset", ErrorCode::FactoryResetFailed);
         k_sleep(Z_TIMEOUT_MS(1000));
-        TRY_UART_COMM(uart::primitives::flush_and_wait(*this, kRestartTimeout), "FactoryReset", ErrorCode::FactoryResetFailed);
+        TRY_UART_COMM(flush_and_wait(*this, kRestartTimeout), "FactoryReset", ErrorCode::FactoryResetFailed);
         if (m_Mode != SystemMode::Simple)
         {
             auto rs = ChangeConfiguration().SetSystemMode(m_Mode).EndChange();
@@ -158,26 +161,27 @@ namespace ai_thinker
 
     RD03E::ExpectedResult RD03E::ReadFrame()
     {
+        using namespace uart::primitives;
         //ReadFrame: Read bytes: f4 f3 f2 f1 0b 00 02 aa 02 00 00 00 a0 00 64 55 00 f8 f7 f6 f5 
         constexpr uint8_t report_begin[] = {0xaa};
         constexpr uint8_t report_end[] = {0x55};
         SystemMode mode;
         uint8_t check;
         uint16_t reportLen = 0;
-        TRY_UART_COMM(uart::primitives::read_until(*this, kDataFrameHeader[0], duration_ms_t(1000), "Searching for header"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
-        TRY_UART_COMM(uart::primitives::match_bytes(*this, kDataFrameHeader, "Matching header"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
-        TRY_UART_COMM(uart::primitives::read_any(*this, reportLen, mode), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
-        TRY_UART_COMM(uart::primitives::match_bytes(*this, report_begin, "Matching rep begin"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
-        TRY_UART_COMM(uart::primitives::read_into(*this, m_Presence), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);//simple Part of the detection is always there
+        TRY_UART_COMM(read_until(*this, kDataFrameHeader[0], duration_ms_t(1000), "Searching for header"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+        TRY_UART_COMM(match_bytes(*this, kDataFrameHeader, "Matching header"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+        TRY_UART_COMM(read_any(*this, reportLen, mode), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+        TRY_UART_COMM(match_bytes(*this, report_begin, "Matching rep begin"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+        TRY_UART_COMM(read_into(*this, m_Presence), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);//simple Part of the detection is always there
         if (mode == SystemMode::Energy)
         {
             if ((reportLen - 4 - sizeof(m_Presence)) != sizeof(m_Engeneering))
                 return std::unexpected(Err{{"Wrong engeneering size"}, "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed});
-            TRY_UART_COMM(uart::primitives::read_into(*this, m_Engeneering), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+            TRY_UART_COMM(read_into(*this, m_Engeneering), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
         }
-        TRY_UART_COMM(uart::primitives::match_bytes(*this, report_end, "Matching rep end"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
-        TRY_UART_COMM(uart::primitives::read_into(*this, check), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);//simple Part of the detection is always there
-        TRY_UART_COMM(uart::primitives::match_bytes(*this, kDataFrameFooter, "Matching footer"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+        TRY_UART_COMM(match_bytes(*this, report_end, "Matching rep end"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
+        TRY_UART_COMM(read_into(*this, check), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);//simple Part of the detection is always there
+        TRY_UART_COMM(match_bytes(*this, kDataFrameFooter, "Matching footer"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
         return std::ref(*this);
     }
 
