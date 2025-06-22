@@ -7,7 +7,7 @@
 #include <chrono>
 namespace uart
 {
-    using duration_ms_t = ssize_t;
+    using duration_ms_t = int;
     class Channel
     {
     public:
@@ -33,15 +33,11 @@ namespace uart
         ExpectedResult Open();
         ExpectedResult Close();
 
-        ExpectedValue<size_t> GetReadyToReadDataLen();
-        ExpectedValue<size_t> GetReadyToWriteDataLen();
-        
         ExpectedResult Send(const uint8_t *pData, size_t len);
-        ExpectedResult SendWithBreak(const uint8_t *pData, size_t len, size_t breakLen);
-
         ExpectedValue<size_t> Read(uint8_t *pBuf, size_t len, duration_ms_t wait=kDefaultWait);
         ExpectedResult Flush();
         ExpectedResult WaitAllSent();
+
         ExpectedValue<uint8_t> ReadByte(duration_ms_t wait=kDefaultWait);
         ExpectedValue<uint8_t> PeekByte(duration_ms_t wait=kDefaultWait);
 
@@ -50,15 +46,27 @@ namespace uart
         //bool HasEventCallback() const { return (bool)m_EventCallback; }
 
     private:
-        static void uart_event_loop(Channel &c);
+        static void uart_isr(const struct device *uart_dev, void *user_data);
 
-        bool m_DbgPrintSend = false;
         const struct device *m_pUART = nullptr;
+        struct k_sem m_tx_sem;
+        struct k_sem m_rx_sem;
         duration_ms_t m_DefaultWait{0};
+
+        //receive buf
+        uint8_t *m_pRecvBuf;
+        int m_RecvLen;
+        //transmitt buf
+        const uint8_t *m_pSendBuf;
+        int m_SendLen;
+
         bool m_HasPeekByte = false;
         uint8_t m_PeekByte = 0;
+
         //std::atomic<bool> m_DataReady={false};
         //EventCallback m_EventCallback;
+
+        //bool m_DbgPrintSend = false;
     };
 }
 #endif
