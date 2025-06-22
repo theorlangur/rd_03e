@@ -4,10 +4,13 @@
 #include <zephyr/kernel.h>
 #include "lib_ret_err.h"
 #include <expected>
-#include <chrono>
+
 namespace uart
 {
     using duration_ms_t = int;
+    static constexpr const duration_ms_t kForever = -2;
+    static constexpr const int ERR_OK = 0;
+
     class Channel
     {
     public:
@@ -45,6 +48,7 @@ namespace uart
         //void SetEventCallback(EventCallback cb) { m_EventCallback = std::move(cb); }
         //bool HasEventCallback() const { return (bool)m_EventCallback; }
 
+        bool m_Dbg;
     private:
         static void uart_isr(const struct device *uart_dev, void *user_data);
 
