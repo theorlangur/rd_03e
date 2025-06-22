@@ -9,6 +9,7 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
+#include <zephyr/drivers/sensor/ait_rd_03e.h>
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   5000
@@ -22,8 +23,12 @@
  */
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 
+constinit const struct device *rd03e = DEVICE_DT_GET(DT_NODELABEL(rd03e));
+constinit const struct device *rd_uart = nullptr;
+
 int main(void)
 {
+	rd_uart = rd03e_dbg_uart(rd03e);
 	int ret;
 	bool led_state = true;
 
