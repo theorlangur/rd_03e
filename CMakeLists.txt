@@ -7,6 +7,8 @@ set(EXTRA_DTC_OVERLAY_FILE "dts.overlay")
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
 project(presence_rd_03e)
 
+target_include_directories(app PRIVATE submodules/esp_generic_lib/include)
+
 target_sources(app PRIVATE src/main.cpp)
 add_subdirectory(src/lib)
 
