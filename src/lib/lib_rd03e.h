@@ -35,10 +35,7 @@ public:
         RecvFrame_Incomplete,
 
         SimpleData_Malformed,
-        EnergyData_Malformed,
-
         SimpleData_Failure,
-        EnergyData_Failure,
 
         FillBuffer_NoSpace,
         FillBuffer_ReadFailure,
@@ -50,25 +47,11 @@ public:
     };
     static const char* err_to_str(ErrorCode e);
 
-    enum class SystemMode: uint8_t
-    {
-        Simple = 0x02,
-        Energy = 0x01,
-    };
-
-    enum class TargetState: uint8_t
+    enum class TargetType: uint8_t
     {
         Clear,
         Move,
         Still,
-        MoveAndStill,
-    };
-
-    enum class DistanceRes: uint8_t
-    {
-        _0_75 = 0,
-        _0_50 = 1,
-        _0_20 = 3,
     };
 
     enum class Drain
@@ -76,6 +59,18 @@ public:
         No,
         Try,
         Only,
+    };
+
+    enum class BaudRate: uint16_t
+    {
+        _9600   = 0x0001,
+        _19200  = 0x0002,
+        _38400  = 0x0003,
+        _57600  = 0x0004,
+        _115200 = 0x0005,
+        _230400 = 0x0006,
+        _256000 = 0x0007,
+        _460800 = 0x0008,
     };
 
     using Ref = std::reference_wrapper<RD03E>;
@@ -121,22 +116,10 @@ public:
     /* PresenceResult                                                     */
     /**********************************************************************/
 #pragma pack(push,1)
-    struct PresenceResult
+    struct PresenceData
     {
-        TargetState m_State = TargetState::Clear;
-        uint16_t m_MoveDistance = 0;//cm
-        uint8_t m_MoveEnergy = 0;
-        uint16_t m_StillDistance = 0;//cm
-        uint8_t m_StillEnergy = 0;
-    };
-    struct Engeneering
-    {
-        uint8_t m_MaxMoveGate;
-        uint8_t m_MaxStillGate;
-        uint8_t m_MoveEnergy[14];
-        uint8_t m_StillEnergy[14];
-        uint8_t m_Light;
-        uint8_t m_Dummy;
+        TargetType m_Target;
+        uint16_t   m_Distance;//cm
     };
     struct Version
     {
@@ -147,67 +130,9 @@ public:
 #pragma pack(pop)
 
 
-    /**********************************************************************/
-    /* ConfigBlock                                                        */
-    /**********************************************************************/
-    struct ConfigBlock
-    {
-        RD03E &d;
-
-        ConfigBlock(RD03E &d): d(d), m_Configuration(d.m_Configuration) {}
-        ConfigBlock(ConfigBlock const&) = delete;
-        ConfigBlock(ConfigBlock &&) = delete;
-        ConfigBlock& operator=(ConfigBlock const &) = delete;
-        ConfigBlock& operator=(ConfigBlock &&) = delete;
-
-
-        ConfigBlock& SetSystemMode(SystemMode mode);
-        ConfigBlock& SetDistanceRes(DistanceRes r);
-
-        ConfigBlock& SetMinDistance(int dist);
-        ConfigBlock& SetMinDistanceRaw(uint8_t dist);
-
-        ConfigBlock& SetMaxDistance(int dist);
-        ConfigBlock& SetMaxDistanceRaw(uint8_t dist);
-
-        ConfigBlock& SetTimeout(uint16_t t);
-
-        ConfigBlock& SetOutPinPolarity(bool lowOnPresence);
-
-        ConfigBlock& SetMoveThreshold(uint8_t gate, uint8_t energy);
-        ConfigBlock& SetStillThreshold(uint8_t gate, uint8_t energy);
-
-        ExpectedResult EndChange();
-    private:
-        SystemMode m_NewMode;
-        DistanceRes m_NewDistanceRes;
-        Configuration m_Configuration;
-
-        union{
-            struct
-            {
-                uint32_t Mode             : 1;
-                uint32_t MinDistance      : 1;
-                uint32_t MaxDistance      : 1;
-                uint32_t Timeout          : 1;
-                uint32_t OutPin           : 1;
-                uint32_t MoveThreshold    : 1;
-                uint32_t StillThreshold   : 1;
-                uint32_t DistanceRes      : 1;
-                uint32_t Unused           : 24;
-            }m_Changed;
-            
-            struct{
-                uint32_t m_Changes = 0;
-            };
-        };
-    };
-
     RD03E(const struct device *pUART);
 
     ExpectedResult Init(int txPin, int rxPin);
-
-    SystemMode GetSystemMode() const { return m_Mode; }
 
     int GetMinDistance() const { return m_Configuration.m_Base.m_MinDistanceGate * 75 / 100; }
     uint8_t GetMinDistanceRaw() const { return m_Configuration.m_Base.m_MinDistanceGate; }
@@ -219,15 +144,9 @@ public:
     auto GetStillThreshold(uint8_t gate) const { return m_Configuration.m_StillThreshold[gate]; }
     auto const& GetAllMoveThresholds() const { return m_Configuration.m_MoveThreshold; }
     auto const& GetAllStillThresholds() const { return m_Configuration.m_StillThreshold; }
-    auto GetMeasuredMoveEnergy(uint8_t gate) const { return m_Engeneering.m_MoveEnergy[gate]; }
-    auto GetMeasuredStillEnergy(uint8_t gate) const { return m_Engeneering.m_StillEnergy[gate]; }
-    auto GetMeasuredLight() const { return m_Engeneering.m_Light; }
 
     auto GetTimeout() const { return m_Configuration.m_Base.m_Duration; }//seconds
     bool GetOutPinPolarity() const { return m_Configuration.m_Base.m_OutputPinPolarity; }
-    auto GetDistanceRes() const { return m_DistanceResolution.m_Res; }
-
-    ConfigBlock ChangeConfiguration() { return {*this}; }
 
     ExpectedResult UpdateDistanceRes();
 
@@ -241,9 +160,6 @@ public:
     ExpectedResult Restart();
     ExpectedResult FactoryReset();
 
-    PresenceResult GetPresence() const { return m_Presence; }
-    const Engeneering& GetEngeneeringData() const { return m_Engeneering; }
-
     ExpectedResult TryReadFrame(int attempts = 3, bool flush = false, Drain drain = Drain::No);
 
     //using Channel::SetEventCallback;
@@ -255,24 +171,11 @@ public:
 private:
     enum class Cmd: uint16_t
     {
-        ReadVer = 0x00a0,
-        WriteBaseParams = 0x0002,
-        ReadBaseParams = 0x0012,
+        ReadVer = 0x000a,
+        WriteBaseParams = 0x0067,
+        ReadBaseParams = 0x0073,
 
-        EnterEngMode = 0x0062,
-        LeaveEngMode = 0x0063,
-
-        //QueryDistanceResolution = 0x0011,
-        //SetDistanceResolution = 0x0001,
-
-        SetMoveSensitivity = 0x0003,
-        GetMoveSensitivity = 0x0013,
-
-        SetStillSensitivity = 0x0004,
-        GetStillSensitivity = 0x0014,
-
-        RunDynamicBackgroundAnalysis = 0x000B,
-        QuearyDynamicBackgroundAnalysis = 0x001B,
+        SetSerialBaudRate = 0x00a1,
 
         FactoryReset = 0x00a2,
         Restart = 0x00a3,
@@ -282,11 +185,6 @@ private:
 
         OpenCmd = 0x00ff,
         CloseCmd = 0x00fe,
-
-        //SetDistanceRes = 0x00aa,
-        //GetDistanceRes = 0x00ab,
-        SetDistanceRes = 0x0001,
-        GetDistanceRes = 0x0011,
     };
 
     friend Cmd operator|(Cmd r, uint16_t v)
@@ -316,8 +214,8 @@ private:
 
     constexpr static uint8_t kFrameHeader[] = {0xFD, 0xFC, 0xFB, 0xFA};
     constexpr static uint8_t kFrameFooter[] = {0x04, 0x03, 0x02, 0x01};
-    constexpr static uint8_t kDataFrameHeader[] = {0xf4, 0xf3, 0xf2, 0xf1};
-    constexpr static uint8_t kDataFrameFooter[] = {0xf8, 0xf7, 0xf6, 0xf5};
+    constexpr static uint8_t kMotionDataFrameHeader[] = {0xaa, 0xaa};
+    constexpr static uint8_t kMotionDataFrameFooter[] = {0x55, 0x55};
 
     template<class E>
     static ExpectedResult to_result(E &&e, const char* pLocation, ErrorCode ec)
@@ -477,30 +375,19 @@ private:
     ExpectedOpenCmdModeResult OpenCommandMode();
     ExpectedGenericCmdResult CloseCommandMode();
 
-    ExpectedGenericCmdResult SetSystemModeInternal(SystemMode mode);
     ExpectedGenericCmdResult UpdateVersion();
-    ExpectedGenericCmdResult SetDistanceResInternal(DistanceRes r);
 
     ExpectedResult QueryDynamicBackgroundAnalysisRunState();
 
     ExpectedResult ReadFrame();
     //data
     Version m_Version;
-    SystemMode m_Mode = SystemMode::Simple;
-    //OpenCmdModeResponse m_ProtoInfo{0, 0};
     Configuration m_Configuration;
 
     //the data will be read into as is
-    PresenceResult m_Presence;
-    Engeneering m_Engeneering;
+    PresenceData m_PresenceData;
 
     uint8_t m_BluetoothMAC[6] = {0};
-    struct DistanceResBuf
-    {
-        DistanceRes m_Res = DistanceRes::_0_75;
-        uint8_t m_FixedBuf[5] = {0, 0, 0, 0, 0};
-    }m_DistanceResolution;
-
     bool m_DynamicBackgroundAnalysis = false;
 public:
     struct DbgNow
@@ -518,7 +405,7 @@ public:
 };
 
 
-inline bool operator&(RD03E::TargetState s1, RD03E::TargetState s2)
+inline bool operator&(RD03E::TargetType s1, RD03E::TargetType s2)
 {
     return (uint8_t(s1) & uint8_t(s2)) != 0;
 }
@@ -545,69 +432,20 @@ struct tools::formatter_t<ai_thinker::RD03E::CmdErr>
 };
 
 template<>
-struct tools::formatter_t<ai_thinker::RD03E::TargetState>
+struct tools::formatter_t<ai_thinker::RD03E::TargetType>
 {
     template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::TargetState const& p)
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::TargetType const& p)
     {
         const char *pStr = "<unk>";
         switch(p)
         {
-            case ai_thinker::RD03E::TargetState::Clear: pStr = "Clear"; break;
-            case ai_thinker::RD03E::TargetState::Still: pStr = "Still"; break;
-            case ai_thinker::RD03E::TargetState::Move: pStr = "Move"; break;
-            case ai_thinker::RD03E::TargetState::MoveAndStill: pStr = "MoveAndStill"; break;
+            using enum ai_thinker::RD03E::TargetType;
+            case Clear: pStr = "Clear"; break;
+            case Still: pStr = "Still"; break;
+            case Move: pStr = "Move"; break;
         }
         return tools::format_to(std::forward<Dest>(dst), "{}", pStr);
-    }
-};
-
-template<>
-struct tools::formatter_t<ai_thinker::RD03E::SystemMode>
-{
-    template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::SystemMode const& p)
-    {
-        const char *pStr = "<unk>";
-        switch(p)
-        {
-            case ai_thinker::RD03E::SystemMode::Simple: pStr = "Simple"; break;
-            case ai_thinker::RD03E::SystemMode::Energy: pStr = "Energy"; break;
-        }
-        return tools::format_to(std::forward<Dest>(dst), "{}", pStr);
-    }
-};
-
-template<>
-struct tools::formatter_t<ai_thinker::RD03E::PresenceResult>
-{
-    template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::PresenceResult const& p)
-    {
-        return tools::format_to(std::forward<Dest>(dst), "[{}; move(dist={}cm; energy={}); still(dist={}cm; energy={})]"
-                , p.m_State
-                , p.m_MoveDistance, p.m_MoveEnergy
-                , p.m_StillDistance, p.m_StillEnergy
-            );
-    }
-};
-
-template<>
-struct tools::formatter_t<ai_thinker::RD03E::Engeneering>
-{
-    template<FormatDestination Dest>
-    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::Engeneering const& p)
-    {
-        return tools::format_to(std::forward<Dest>(dst), 
-                "Max Move Gate:{} Max Still Gate:{}\n"
-                "Move: {}\n"
-                "Still: {}\n"
-                "Light: {}\n"
-                , p.m_MaxMoveGate, p.m_MaxStillGate,
-                  p.m_MoveEnergy,
-                  p.m_StillEnergy,
-                  p.m_Light
-            );
     }
 };
 
