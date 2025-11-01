@@ -9,8 +9,9 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/sensor/ait_rd_03e.h>
+//#include <zephyr/drivers/sensor/ait_rd_03e.h>
 #include "lib/lib_uart.h"
+#include "lib/lib_rd03e.h"
 
 /* 1000 msec = 1 sec */
 #define SLEEP_TIME_MS   5000
@@ -24,13 +25,19 @@
  */
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
 
-constinit const struct device *rd03e = DEVICE_DT_GET(DT_NODELABEL(rd03e));
-constinit const struct device *rd_uart = nullptr;
+//constinit const struct device *rd03e = DEVICE_DT_GET(DT_NODELABEL(rd03e));
+//constinit const struct device *rd_uart = nullptr;
+constinit const struct device *rd_uart = DEVICE_DT_GET(DT_NODELABEL(uart0));
 
 int main(void)
 {
-	rd_uart = rd03e_dbg_uart(rd03e);
-	uart::Channel ch(rd_uart);
+	//rd_uart = rd03e_dbg_uart(rd03e);
+	//uart::Channel ch(rd_uart);
+	ai_thinker::RD03E rd03e(rd_uart);
+	rd03e.Open();
+	rd03e.GetVersion();
+	//rd03e.Init();
+
 	int ret;
 	bool led_state = true;
 
