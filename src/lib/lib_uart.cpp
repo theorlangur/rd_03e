@@ -1,6 +1,9 @@
+#define FORCE_FMT
+#define PRINTF_FUNC(...) printk(__VA_ARGS__)
+
 #include "lib_uart.h"
 #include <functional>
-#include <zephyr/drivers/uart.h>
+#include "lib_misc_helpers.hpp"
 
 namespace uart
 {
@@ -15,15 +18,16 @@ namespace uart
 
     Channel::ExpectedResult Channel::Configure()
     {
+	uart_config cfg;
+	uart_config_get(m_pUART, &cfg);
+	m_UARTRxTimeoutUS = (1'000'000 * kUARTRxTimeoutBits) / cfg.baudrate;
+	if (m_UARTRxTimeoutUS == 0) m_UARTRxTimeoutUS = 4;
+
 	k_sem_init(&m_rx_sem, 0, 1);
 	k_sem_init(&m_tx_sem, 1, 1);
+	k_sem_init(&m_rx_ctrl, 0, 1);
 
-	uart_irq_rx_disable(m_pUART);
-	uart_irq_tx_disable(m_pUART);
-
-	if (auto r = Flush(); !r) return r;
-
-	uart_irq_callback_user_data_set(m_pUART, &uart_isr, (void *)this);
+	uart_callback_set(m_pUART, uart_async_callback, this);
 
 	return std::ref(*this);
     }
@@ -38,105 +42,256 @@ namespace uart
 	return std::ref(*this);
     }
 
-    void Channel::uart_isr(const struct device *uart_dev, void *user_data)
+    void Channel::uart_async_callback(const struct device *dev, uart_event *evt, void *user_data)
     {
 	Channel *pC = (Channel *)user_data;
-	if (!uart_dev) return;
-	if (!uart_irq_update(uart_dev)) return;
-
-	if (uart_irq_rx_ready(uart_dev))
+	switch(evt->type)
 	{
-	    int b = uart_fifo_read(uart_dev, pC->m_pRecvBuf, pC->m_RecvLen);
-	    if (b < 0)
+	    case UART_TX_ABORTED:
+		break;
+	    case UART_TX_DONE:
 	    {
-		pC->m_RecvLen = b;
-		uart_irq_rx_disable(uart_dev);
-		k_sem_give(&pC->m_rx_sem);
-	    }else
-	    {
-		pC->m_pRecvBuf += b;
-		pC->m_RecvLen -= b;
-		if (!pC->m_RecvLen)
+		k_sem_give(&pC->m_tx_sem);
+		if (pC->m_rx_enable_request)
 		{
-		    pC->m_pRecvBuf = nullptr;
-		    uart_irq_rx_disable(uart_dev);
-		    k_sem_give(&pC->m_rx_sem);
+		    pC->m_rx_enable_request = false;
+		    uart_rx_enable(pC->m_pUART, pC->m_UARTAsyncBufs[0], kUARTAsyncBufSize, pC->m_UARTRxTimeoutUS);
 		}
 	    }
-	}
-
-	if (uart_irq_tx_ready(uart_dev))
-	{
-	    if (pC->m_pSendBuf)
+	    break;
+	    case UART_RX_BUF_REQUEST:
 	    {
-		int b = uart_fifo_fill(uart_dev, pC->m_pSendBuf, pC->m_SendLen);
-		if (b < 0)
+		if (pC->m_rx_disable_request)
 		{
-		    pC->m_SendLen = b;
-		    uart_irq_tx_disable(uart_dev);
-		    k_sem_give(&pC->m_tx_sem);
-		}else
+		    pC->m_rx_disable_request = false;
+		    uart_rx_disable(dev);
+		    break;
+		}
+
+		if (pC->m_UARTAsyncBufNext != -1)
 		{
-		    pC->m_pSendBuf += b;
-		    pC->m_SendLen -= b;
-		    if (!pC->m_SendLen)
+		    pC->m_UARTAsyncBufNext ^= 1;
+		    uart_rx_buf_rsp(dev
+			    , pC->m_UARTAsyncBufs[pC->m_UARTAsyncBufNext]
+			    , kUARTAsyncBufSize);
+		}
+	    }
+	    break;
+	    case UART_RX_BUF_RELEASED:
+		if (pC->m_rx_disable_request)
+		{
+		    pC->m_rx_disable_request = false;
+		    uart_rx_disable(dev);
+		}
+		break;
+	    case UART_RX_DISABLED:
+		k_sem_give(&pC->m_rx_ctrl);
+		break;
+	    case UART_RX_RDY:
+		{
+		    if (pC->m_pInternalRecvBuf)
 		    {
-			pC->m_pSendBuf = nullptr;
-			uart_irq_tx_disable(uart_dev);
-			k_sem_give(&pC->m_tx_sem);
+			int to_write = evt->data.rx.len;
+			int read_pos = pC->m_InternalRecvBufNextRead;
+			int write_pos = pC->m_InternalRecvBufNextWrite;
+			if (read_pos < write_pos) read_pos += pC->m_InternalRecvBufLen;
+			if ((write_pos != read_pos) && ((write_pos + to_write) >= read_pos))
+			{
+			    pC->m_Overflow = true;
+			    pC->m_InternalRecvBufNextRead = ((write_pos + to_write + 1) % pC->m_InternalRecvBufLen);
+			}
+
+			int left = pC->m_InternalRecvBufLen - pC->m_InternalRecvBufNextWrite;
+			if (left <= to_write) 
+			{
+			    pC->m_UARTAsyncBufNext = -1;
+			    to_write = left;
+			}
+
+			if (to_write)
+			{
+			    memcpy(pC->m_pInternalRecvBuf + pC->m_InternalRecvBufNextWrite, 
+				    evt->data.rx.buf + evt->data.rx.offset,
+				    to_write);
+			    pC->m_InternalRecvBufNextWrite += to_write;
+			    pC->m_InternalRecvBufNextWrite %= pC->m_InternalRecvBufLen;
+			    int orig = to_write;
+			    to_write = evt->data.rx.len - to_write;
+			    if (to_write)
+			    {
+				memcpy(pC->m_pInternalRecvBuf + pC->m_InternalRecvBufNextWrite, 
+					evt->data.rx.buf + evt->data.rx.offset + orig,
+					to_write);
+				pC->m_InternalRecvBufNextWrite += to_write;
+			    }
+			    k_sem_give(&pC->m_rx_sem);
+			}else
+			{
+			    //printk("rx rdy (buf): nothing to write\r\n");
+			}
+		    }
+		    else
+		    {
+			//printk("rx rdy (no buf): %d\r\n", evt->data.rx.len);
 		    }
 		}
-	    }else
-	    {
-		//disable
-		uart_irq_tx_disable(uart_dev);
-	    }
+		break;
+	    case UART_RX_STOPPED:
+		//printk("rx stopped\r\n");
+		break;
 	}
+    }
+
+    int Channel::uart_send()
+    {
+	if (!m_SendLen) return 0;
+	int b = uart_fifo_fill(m_pUART, m_pSendBuf, m_SendLen);
+	if (b < 0) return b;
+	m_pSendBuf += b;
+	m_SendLen -= b;
+	return b;
+    }
+
+    int Channel::uart_recv()
+    {
+	if (!m_RecvLen) return 0;
+	int b = uart_fifo_read(m_pUART, m_pRecvBuf, m_RecvLen);
+	if (b < 0) return b;
+	m_pRecvBuf += b;
+	m_RecvLen -= b;
+	return b;
     }
 
     Channel::ExpectedResult Channel::Send(const uint8_t *pData, size_t len)
     {
 	CALL_WITH_EXPECTED("Channel::Send", k_sem_take(&m_tx_sem, Z_TIMEOUT_MS(m_DefaultWait)));
+	//FMT_PRINTLN("Channel::Send: {}", std::span<const uint8_t>{pData, len});
 	m_pSendBuf = pData;
 	m_SendLen = len;
-	uart_irq_tx_enable(m_pUART);
+	CALL_WITH_EXPECTED("Channel::Send (uart_tx)", uart_tx(m_pUART, pData, len, SYS_FOREVER_US));
 	return std::ref(*this);
+    }
+
+    Channel::ExpectedResult Channel::AllowReadUpTo(uint8_t *pData, size_t len)
+    {
+	FMT_PRINTLN("Channel::AllowReadUpTo: {}", len);
+	m_pInternalRecvBuf = pData;
+        m_InternalRecvBufLen = len;
+        m_InternalRecvBufNextWrite = 0;
+        m_InternalRecvBufNextRead = 0;
+	m_UARTAsyncBufNext = 0;
+	m_rx_enable_request = true;
+	//CALL_WITH_EXPECTED("Channel::AllowReadUpTo", uart_rx_enable(m_pUART, m_UARTAsyncBufs[0], kUARTAsyncBufSize, kUARTRxTimeoutUS));
+	//uart_irq_rx_enable(m_pUART);
+	return std::ref(*this);
+    }
+
+    void Channel::StopReading(bool dbg)
+    {
+	m_rx_disable_request = true;
+	int r = k_sem_take(&m_rx_ctrl, Z_TIMEOUT_MS(m_DefaultWait));
+
+	if (r < 0)
+	{
+	    FMT_PRINTLN("Channel::StopReading: could not disable RX: {}", r);
+	}else
+	{
+	    //FMT_PRINTLN("Channel::StopReading: written {}; read: {};", m_InternalRecvBufNextWrite, m_InternalRecvBufNextRead);
+	    if (m_pInternalRecvBuf && m_InternalRecvBufNextWrite)
+	    {
+		if (dbg)
+		{
+		    FMT_PRINTLN("Channel::StopReading: data in buf: {}", std::span<const uint8_t>{(const uint8_t*)m_pInternalRecvBuf, (size_t)m_InternalRecvBufNextWrite});
+		}
+		else if (m_InternalRecvBufNextWrite != m_InternalRecvBufNextRead)
+		{
+		    FMT_PRINTLN("Channel::StopReading: unread data in buf: {}", std::string_view{(const char*)m_pInternalRecvBuf + m_InternalRecvBufNextRead, (size_t)(m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead)});
+		}
+	    }
+	}
+	m_pInternalRecvBuf = nullptr;
+        m_InternalRecvBufLen = 0;
+        m_InternalRecvBufNextWrite = 0;
+        m_InternalRecvBufNextRead = 0;
+	m_UARTAsyncBufNext = -1;
     }
 
     Channel::ExpectedValue<size_t> Channel::Read(uint8_t *pBuf, size_t len, duration_ms_t wait)
     {
-	if (!len) return RetVal<size_t>{*this, size_t(0)};
+	m_Overflow = false;
+	if (!len) 
+	{
+	    printk("Channel::Read: len=0\r\n");
+	    return RetVal<size_t>{*this, size_t(0)};
+	}
 	if (wait == kDefaultWait) wait = m_DefaultWait;
 	bool addedPeek = m_HasPeekByte;
 	if (m_HasPeekByte)
 	{
+	    //printk("Channel::Read: peek byte of=%d\r\n", m_PeekByte);
 	    pBuf[0] = m_PeekByte;
 	    m_HasPeekByte = false;
 	    --len;
 	    ++pBuf;
-	    if (!len) return RetVal<size_t>{*this, 1};
+	    if (!len) 
+	    {
+		//printk("Channel::Read: peek only\r\n");
+		return RetVal<size_t>{*this, 1};
+	    }
 	}
 
-	m_pRecvBuf = pBuf;
-	m_RecvLen = len;
-	uart_irq_rx_enable(m_pUART);
-	CALL_WITH_EXPECTED("Channel::Read", k_sem_take(&m_rx_sem, Z_TIMEOUT_MS(wait)));
-	return RetVal<size_t>{*this, len};
+	if (m_pInternalRecvBuf)
+	{
+	    int avail = m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead;
+	    int left = len;
+	    int n = std::min(avail, left);
+	    memcpy(pBuf, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
+	    m_InternalRecvBufNextRead += n;
+	    left -= n;
+	    if (!left)
+		return RetVal<size_t>{*this, len};
+	    if (wait == 0)
+		return RetVal<size_t>{*this, size_t(n)};
+	    if (left > (m_InternalRecvBufLen - m_InternalRecvBufNextRead))
+	    {
+		//error. wanting to read more than possible
+		return std::unexpected(Err{"Channel::Read(too much)", 0});
+	    }
+
+	    while(left)
+	    {
+		//uart_irq_rx_enable(m_pUART);
+		CALL_WITH_EXPECTED("Channel::Read(internal)", k_sem_take(&m_rx_sem, Z_TIMEOUT_MS(wait)));
+		avail = m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead;
+		n = std::min(avail, left);
+		memcpy(pBuf, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
+		m_InternalRecvBufNextRead += n;
+		left -= n;
+	    }
+	    return RetVal<size_t>{*this, len};
+	}
+	return std::unexpected(Err{"Channel::Read(wrong state)", 0});
     }
 
-    Channel::ExpectedResult Channel::Flush()
+    Channel::ExpectedResult Channel::Drain(bool stopAtEnd)
     {
-	uart_irq_rx_disable(m_pUART);
-	k_sem_reset(&m_rx_sem);
-	uint8_t c;
-	while(uart_fifo_read(m_pUART, &c, 1) == 1)
-	    continue;
+	uint8_t buf[8];
+	while(Read(buf, sizeof(buf), 0));
+
+	if (stopAtEnd)
+	{
+	    if (m_pInternalRecvBuf)
+		StopReading();
+
+	    k_sem_reset(&m_rx_sem);
+	}
 	return std::ref(*this);
     }
 
     Channel::ExpectedResult Channel::WaitAllSent()
     {
 	CALL_WITH_EXPECTED("Channel::WaitAllSent", k_sem_take(&m_tx_sem, Z_TIMEOUT_MS(m_DefaultWait)));
+	k_sem_give(&m_tx_sem);
 	return std::ref(*this);
     }
 

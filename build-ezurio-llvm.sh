@@ -1,7 +1,8 @@
 #!/bin/bash
 # --board orlangur_ezurio_nrf54l15/nrf54l15/cpuapp -- \
+    # --board promicro_nrf52840/nrf52840/uf2 -- \
 west build --build-dir build_ezurio_llvm . --pristine \
-    --board promicro_nrf52840/nrf52840/uf2 \
+    --board orlangur_ezurio_nrf54l15/nrf54l15/cpuapp -- \
     -DBOARD_ROOT=~/myapps/cpp/nrf \
     -DCONF_FILE="prj.conf config/cpp.conf config/zb.conf config/no_log.conf" \
     -DZEPHYR_TOOLCHAIN_VARIANT=llvm \

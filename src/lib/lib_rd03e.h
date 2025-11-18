@@ -123,9 +123,9 @@ public:
     };
     struct Version
     {
-        uint8_t m_Minor;
-        uint8_t m_Major;
-        uint32_t m_Misc;
+        uint16_t m_Major;
+        uint16_t m_Minor;
+        uint16_t m_Patch;
     };
 #pragma pack(pop)
 
@@ -195,7 +195,7 @@ private:
     struct OpenCmdModeResponse
     {
         uint16_t protocol_version;
-        uint16_t buffer_size;
+        uint16_t bufsize;
     };
 
 #pragma pack(push,1)
@@ -276,7 +276,7 @@ private:
     {\
         if (retry) \
         {\
-            FMT_PRINT("Failed on " #f);\
+            FMT_PRINTLN("Failed on " #f);\
             continue;\
         }\
         return to_cmd_result(std::move(r), location, ec);\
@@ -286,6 +286,7 @@ private:
     ExpectedResult SendFrameV2(T&&... args)
     {
         using namespace uart::primitives;
+
         //1. header
         TRY_UART_COMM(Send(kFrameHeader, sizeof(kFrameHeader)), "SendFrameV2", ErrorCode::SendFrame);
 
@@ -304,25 +305,37 @@ private:
     }
 
     template<class...T>
+    constexpr static size_t AssessRecvBufSize()
+    {
+        constexpr const size_t arg_size = (uart::primitives::uart_sizeof<std::remove_cvref_t<T>>() + ... + 0);
+        return (sizeof(kFrameHeader) + sizeof(kFrameFooter) + sizeof(uint16_t) + sizeof(arg_size)) * 2;
+    }
+
+    template<class...T>
     ExpectedResult RecvFrameV2(T&&... args)
     {
         constexpr const size_t arg_size = (uart::primitives::uart_sizeof<std::remove_cvref_t<T>>() + ...);
         if (m_dbg) m_Dbg = true;
         ScopeExit resetDbg = [&]{ if (m_dbg) m_Dbg = false; };
-        TRY_UART_COMM(uart::primitives::match_bytes(*this, kFrameHeader), "RecvFrameV2", ErrorCode::RecvFrame_Malformed);
+        ScopeExit onExitStopReading = [&]{this->StopReading();};
+        constexpr size_t kRecvBufSize = (sizeof(kFrameHeader) + sizeof(kFrameFooter) + sizeof(uint16_t) + sizeof(arg_size)) * 2;
+        uint8_t recvBuf[kRecvBufSize];
+        TRY_UART_COMM(AllowReadUpTo(recvBuf, kRecvBufSize), "RD03E::RecvFrameV2<AllowReadUpTo>", ErrorCode::RecvFrame_Malformed);
+        TRY_UART_COMM(uart::primitives::read_until(*this, kFrameHeader[0]), "RecvFrameV2<find header>", ErrorCode::RecvFrame_Malformed);
+        TRY_UART_COMM(uart::primitives::match_bytes(*this, kFrameHeader), "RecvFrameV2<match header>", ErrorCode::RecvFrame_Malformed);
         if (m_dbg) FMT_PRINT("RecvFrameV2: matched header\n"); 
         uint16_t len;
-        TRY_UART_COMM(uart::primitives::read_into(*this, len), "RecvFrameV2", ErrorCode::RecvFrame_Malformed);
+        TRY_UART_COMM(uart::primitives::read_into(*this, len), "RecvFrameV2<read len>", ErrorCode::RecvFrame_Malformed);
         if (m_dbg) FMT_PRINT("RecvFrameV2: len: {}\n", len);
         if (arg_size > len)
             return std::unexpected(Err{{}, "RecvFrameV2 len invalid", ErrorCode::RecvFrame_Malformed}); 
 
-        TRY_UART_COMM(uart::primitives::read_any_limited(*this, len, std::forward<T>(args)...), "RecvFrameV2", ErrorCode::RecvFrame_Malformed);
+        TRY_UART_COMM(uart::primitives::read_any_limited(*this, len, std::forward<T>(args)...), "RecvFrameV2<payload>", ErrorCode::RecvFrame_Malformed);
         if (len)
         {
             TRY_UART_COMM(uart::primitives::skip_bytes(*this, len), "RecvFrameV2", ErrorCode::RecvFrame_Malformed);
         }
-        TRY_UART_COMM(uart::primitives::match_bytes(*this, kFrameFooter), "RecvFrameV2", ErrorCode::RecvFrame_Malformed);
+        TRY_UART_COMM(uart::primitives::match_bytes(*this, kFrameFooter), "RecvFrameV2<match footer>", ErrorCode::RecvFrame_Malformed);
         return std::ref(*this);
     }
 
@@ -335,9 +348,15 @@ private:
         static_assert(sizeof(CmdT) == 2, "must be 2 bytes");
         if (GetDefaultWait() < kDefaultWait)
             SetDefaultWait(kDefaultWait);
+        //constexpr size_t kRecvBufSize = AssessRecvBufSize<uint16_t, ToRecv...>();
+        //uint8_t recvBuf[kRecvBufSize];
         uint16_t status;
-        auto SendFrameExpandArgs = [&]<size_t...idx>(std::index_sequence<idx...>){
-            return SendFrameV2(cmd, std::get<idx>(sendArgs)...);
+        auto SendFrameExpandArgs = [&]<size_t...idx>(std::index_sequence<idx...>)->ExpectedResult{
+
+            if (auto r = SendFrameV2(cmd, std::get<idx>(sendArgs)...); !r)
+                return r;
+            //TRY_UART_COMM(AllowReadUpTo(recvBuf, kRecvBufSize), "RD03E::SendCommandV2<AllowReadUpTo>", ErrorCode::RecvFrame_Malformed);
+            return std::ref(*this);
         };
         auto RecvFrameExpandArgs = [&]<size_t...idx>(std::index_sequence<idx...>){ 
             return RecvFrameV2(
@@ -352,18 +371,19 @@ private:
                 std::get<idx>(recvArgs)...);
         };
 
-        constexpr int kMaxRetry = 1;
+        constexpr int kMaxRetry = 0;
         for(int retry=kMaxRetry; retry >= 0; --retry)
         {
             if (retry != kMaxRetry)
             {
                 /*if (m_dbg)*/ FMT_PRINT("Sending command {:x} retry: {}\n", uint16_t(cmd), (kMaxRetry - retry));
-                k_sleep(Z_TIMEOUT_MS(kDefaultWait));
+                k_sleep(Z_TIMEOUT_MS(kDefaultWait * 10));
             }
             TRY_UART_COMM_CMD_WITH_RETRY(Flush(), "SendCommandV2", ErrorCode::SendCommand_Failed);
             if (m_dbg) FMT_PRINT("Sent cmd {}\n", uint16_t(cmd));
             TRY_UART_COMM_CMD_WITH_RETRY(SendFrameExpandArgs(std::make_index_sequence<sizeof...(ToSend)>()), "SendCommandV2", ErrorCode::SendCommand_Failed);
             if (m_dbg) FMT_PRINT("Wait all\n");
+            //k_sleep(Z_TIMEOUT_MS(kDefaultWait));
             TRY_UART_COMM_CMD_WITH_RETRY(WaitAllSent(), "SendCommandV2", ErrorCode::SendCommand_Failed);
             if (m_dbg) FMT_PRINT("Receiving {} args\n", sizeof...(ToRecv));
             TRY_UART_COMM_CMD_WITH_RETRY(RecvFrameExpandArgs(std::make_index_sequence<sizeof...(ToRecv)>()), "SendCommandV2", ErrorCode::SendCommand_Failed);
@@ -412,6 +432,16 @@ inline bool operator&(RD03E::TargetType s1, RD03E::TargetType s2)
 }
 
 template<>
+struct tools::formatter_t<::Err>
+{
+    template<FormatDestination Dest>
+    static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ::Err const& e)
+    {
+        return tools::format_to(std::forward<Dest>(dst), "E<{} at {}>", e.code, e.pLocation);
+    }
+};
+
+template<>
 struct tools::formatter_t<ai_thinker::RD03E::Err>
 {
     template<FormatDestination Dest>
@@ -455,7 +485,7 @@ struct tools::formatter_t<ai_thinker::RD03E::Version>
     template<FormatDestination Dest>
     static std::expected<size_t, FormatError> format_to(Dest &&dst, std::string_view const& fmtStr, ai_thinker::RD03E::Version const& v)
     {
-        return tools::format_to(std::forward<Dest>(dst), "v{}.{}.{}" , v.m_Major, v.m_Minor, v.m_Misc);
+        return tools::format_to(std::forward<Dest>(dst), "v{}.{}.{}" , v.m_Major, v.m_Minor, v.m_Patch);
     }
 };
 #endif

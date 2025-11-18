@@ -3,24 +3,41 @@
 #include "lib_uart.h"
 #include <functional>
 #include <span>
-#include <chrono>
 
 namespace uart
 {
     namespace primitives
     {
-        inline auto flush_and_wait(Channel &c, duration_ms_t maxWait = kForever, const char *pCtx = "")
+        struct cfg_t
+        {
+            duration_ms_t maxWait = kDefault;
+            const char *pCtx = "";
+        };
+        inline auto flush_and_wait(Channel &c, cfg_t cfg = {})
         {
             using ExpectedResult = Channel::ExpectedResult;
-            if (auto r = c.Flush(); !r)
+            if (auto r = c.Drain(false); !r)
                 return ExpectedResult(std::unexpected(r.error()));
 
-            if (auto r = c.PeekByte(maxWait); !r)
+            if (auto r = c.PeekByte(cfg.maxWait); !r)
                 return ExpectedResult(std::unexpected(r.error()));
             return ExpectedResult(std::ref(c));
         }
 
-        inline auto skip_bytes(Channel &c, size_t bytes, const char *pCtx = "")
+        inline auto drain(Channel &c, cfg_t cfg = {})
+        {
+            using ExpectedResult = std::expected<Channel::Ref, ::Err>;
+            uint8_t buf[16];
+            while(true)
+            {
+                if (auto r = c.Read(buf, sizeof(buf)); !r)
+                    break;
+            }
+
+            return ExpectedResult(std::ref(c));
+        }
+
+        inline auto skip_bytes(Channel &c, size_t bytes, cfg_t cfg = {})
         {
             using ExpectedResult = std::expected<Channel::Ref, ::Err>;
             uint8_t buf[16];
@@ -35,7 +52,7 @@ namespace uart
             return ExpectedResult(std::ref(c));
         }
 
-        inline auto match_bytes(Channel &c, std::span<const uint8_t> bytes, const char *pCtx = "")
+        inline auto match_bytes(Channel &c, std::span<const uint8_t> bytes, cfg_t cfg = {})
         {
             using ExpectedResult = std::expected<Channel::Ref, ::Err>;
             for(size_t idx = 0, n = bytes.size(); idx < n; ++idx)
@@ -113,7 +130,7 @@ namespace uart
         template<size_t N>
         inline auto match_bytes(Channel &c, const uint8_t (&arr)[N], const char *pCtx = "")
         {
-            return uart::primitives::match_bytes(c, std::span<const uint8_t>(arr, N), pCtx);
+            return uart::primitives::match_bytes(c, std::span<const uint8_t>(arr, N), {.pCtx = pCtx});
         }
 
         template<class... BytePtr>
@@ -164,25 +181,189 @@ namespace uart
             return uart::primitives::match_any_bytes_term(c, 0, std::forward<BytePtr>(bytes)...);
         }
 
-        inline auto read_until(Channel &c, uint8_t until, duration_ms_t maxWait = kForever, const char *pCtx = "")
+        inline auto read_until(Channel &c, uint8_t until, duration_ms_t maxWait = kDefault, const char *pCtx = "")
         {
             using ExpectedResult = std::expected<Channel::Ref, ::Err>;
-            using clock_t = std::chrono::system_clock;
-            using time_point_t = std::chrono::time_point<clock_t>;
-            time_point_t start = clock_t::now();
+            if (maxWait == kDefault) maxWait = c.GetDefaultWait();
+            auto start = k_uptime_get();
+            auto check_timeout = [&]->bool{
+                return (maxWait == kForever) || (k_uptime_get() - start) < maxWait;
+            };
 
-            while((maxWait != kForever) 
-                    && (std::chrono::duration_cast<std::chrono::milliseconds>(clock_t::now() - start).count() < maxWait))
+            while(check_timeout())
             {
-                if (auto r = c.PeekByte(); !r)
+                if (auto r = c.PeekByte(maxWait); !r)
                     return ExpectedResult(std::unexpected(r.error()));
                 else if (r.value().v == until)
                     return ExpectedResult(std::ref(c));
 
-                if (auto r = c.ReadByte(); !r)
+                if (auto r = c.ReadByte(maxWait); !r)
                     return ExpectedResult(std::unexpected(r.error()));
             }
             return ExpectedResult(std::unexpected(::Err{"read_until timeout", ERR_OK}));
+        }
+
+        template<class... Byte>
+        inline auto read_any_until(cfg_t cfg, Channel &c, Byte... until)
+        {
+            using ReadAnyResult = Channel::RetVal<int>;
+            using ExpectedResult = std::expected<ReadAnyResult, Err>;
+            auto start = k_uptime_get();
+            auto maxWait = cfg.maxWait;
+            if (maxWait == kDefault) maxWait = c.GetDefaultWait();
+            auto check_timeout = [&]->bool{
+                return (maxWait == kForever) || (k_uptime_get() - start) < maxWait;
+            };
+
+            while(check_timeout())
+            {
+                if (auto r = c.PeekByte(cfg.maxWait); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+                else 
+                {
+                    int d = -1;
+                    auto check_single = [&](int idx, uint8_t u)
+                    {
+                        if (d != -1) return;
+                        if (r.value().v == u) d = idx;
+                    };
+                    [&]<int... idx>(std::integer_sequence<int, idx...>)
+                    {
+                        (check_single(idx, until),...);
+                    }(std::make_integer_sequence<int, sizeof...(Byte)>());
+                    if (d != -1)
+                        return ExpectedResult(ReadAnyResult{std::ref(c), d});
+                }
+
+                if (auto r = c.ReadByte(cfg.maxWait); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+            }
+            return ExpectedResult(std::unexpected(::Err{"read_until timeout", ERR_OK}));
+        }
+
+        template<size_t N>
+        inline auto find_bytes(Channel &c, const uint8_t (&arr)[N], duration_ms_t maxWait = kDefault, const char *pCtx = "")
+        {
+            using ExpectedResult = std::expected<Channel::Ref, ::Err>;
+            auto start = k_uptime_get();
+            if (maxWait == kDefault) maxWait = c.GetDefaultWait();
+            auto check_timeout = [&]->bool{
+                return (maxWait == kForever) || (k_uptime_get() - start) < maxWait;
+            };
+
+            while(check_timeout())
+            {
+                if (auto r = read_until(c, arr[0], maxWait, pCtx); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+                if (!check_timeout())
+                    return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
+                if (auto r = match_bytes(c, arr, maxWait, pCtx); r)
+                    return ExpectedResult(std::ref(c));
+            }
+            return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
+        }
+
+        inline auto find_bytes(Channel &c, const uint8_t *arr, uint8_t term, duration_ms_t maxWait = kDefault, const char *pCtx = "")
+        {
+            using ExpectedResult = std::expected<Channel::Ref, ::Err>;
+            if (maxWait == kDefault) maxWait = c.GetDefaultWait();
+            auto start = k_uptime_get();
+            auto check_timeout = [&]->bool{
+                return (maxWait == kForever) || (k_uptime_get() - start) < maxWait;
+            };
+
+            int it = 0;
+            while(check_timeout())
+            {
+                if (auto r = read_until(c, arr[0], maxWait, pCtx); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+                if (!check_timeout())
+                {
+                    printk("find_bytes timeout; it=%d\r\n", it);
+                    return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
+                }
+                if (auto r = match_bytes(c, arr, term, pCtx); r)
+                    return ExpectedResult(std::ref(c));
+                ++it;
+            }
+            printk("find_bytes final timeout; it=%d\r\n", it);
+            return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
+        }
+
+        inline auto find_bytes(Channel &c, const char *str, duration_ms_t maxWait = kDefault, const char *pCtx = "")
+        {
+            return find_bytes(c, (const uint8_t*)str, 0, maxWait, pCtx);
+        }
+
+        template<class... BytePtr>
+        inline auto find_any_bytes(cfg_t cfg, Channel &c, uint8_t term, BytePtr&&... arr)
+        {
+            using FindAnyResult = Channel::RetVal<int>;
+            using ExpectedResult = std::expected<FindAnyResult, Err>;
+            auto start = k_uptime_get();
+            auto maxWait = cfg.maxWait;
+            if (maxWait == kDefault) maxWait = c.GetDefaultWait();
+            auto check_timeout = [&]->bool{
+                return (maxWait == kForever) || (k_uptime_get() - start) < maxWait;
+            };
+
+            while(check_timeout())
+            {
+                if (auto r = read_any_until(cfg, c, arr[0]...); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+                if (!check_timeout())
+                    return ExpectedResult(std::unexpected(::Err{"find_any_bytes timeout", ERR_OK}));
+                if (auto r = match_any_bytes_term(c, term, std::forward<BytePtr>(arr)...); r)
+                    return ExpectedResult(FindAnyResult{std::ref(c), (*r).v});
+            }
+            return ExpectedResult(std::unexpected(::Err{"find_any_bytes timeout", ERR_OK}));
+        }
+
+        template<class... BytePtr> requires (convertible_to_const_char_ptr<BytePtr> &&...)
+        inline auto find_any_str(cfg_t cfg, Channel &c, BytePtr&&... str)
+        {
+            return find_any_bytes(cfg, c, 0, std::forward<BytePtr>(str)...);
+        }
+
+        inline auto read_until_into(Channel &c, uint8_t until, uint8_t *pDst, size_t dstSize, bool consume_last, cfg_t cfg)
+        {
+            using ExpectedResult = std::expected<Channel::Ref, ::Err>;
+            auto start = k_uptime_get();
+            auto maxWait = cfg.maxWait;
+            if (maxWait == kDefault) maxWait = c.GetDefaultWait();
+            auto check_timeout = [&]->bool{
+                return (maxWait == kForever) || (k_uptime_get() - start) < maxWait;
+            };
+
+            while(check_timeout())
+            {
+                if (auto r = c.PeekByte(cfg.maxWait); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+                else if (r.value().v == until)
+                {
+                    if (consume_last)
+                    {
+                        if (auto r = c.ReadByte(cfg.maxWait); !r)
+                            return ExpectedResult(std::unexpected(r.error()));
+                    }
+                    return ExpectedResult(std::ref(c));
+                }
+
+                if (!check_timeout())
+                    return ExpectedResult(std::unexpected(::Err{"read_until_into timeout", ERR_OK}));
+
+                if (!dstSize)
+                    return ExpectedResult(std::unexpected(::Err{"read_until_into dst too small", ERR_OK}));
+
+                if (auto r = c.ReadByte(cfg.maxWait); !r)
+                    return ExpectedResult(std::unexpected(r.error()));
+                else
+                {
+                    *pDst++ = (*r).v;
+                    --dstSize;
+                }
+            }
+            return ExpectedResult(std::unexpected(::Err{"read_until_into timeout", ERR_OK}));
         }
 
         template<class T>
@@ -225,7 +406,17 @@ namespace uart
             const char *pCtx = "";
 
             static constexpr size_t size() { return sizeof(std::remove_cvref_t<T>); }
-            auto run(Channel &c) { return uart::primitives::match_bytes(c, std::span<const uint8_t>((uint8_t const*)&v, sizeof(T)), pCtx); }
+            auto run(Channel &c) { return uart::primitives::match_bytes(c, std::span<const uint8_t>((uint8_t const*)&v, sizeof(T)), {.pCtx = pCtx}); }
+        };
+
+        struct find_str_t
+        {
+            using functional_read_helper = void;
+            const char *pStr;
+            const char *pCtx = "";
+
+            static constexpr size_t size() { return 0; }
+            auto run(Channel &c) { return uart::primitives::find_bytes(c, pStr); }
         };
 
         template<size_t N>
@@ -259,7 +450,21 @@ namespace uart
                 if (auto r = c.Read((uint8_t*)v, len); !r)
                     return Channel::ExpectedResult(std::unexpected(r.error()));
                 return Channel::ExpectedResult(std::ref(c));
-            } };
+            } 
+        };
+
+        template<class T, size_t N>
+        struct read_until_t
+        {
+            using functional_read_helper = void;
+            T (&dst)[N];
+            T until;
+            bool consume_last = true;
+
+            static constexpr size_t size() { return sizeof(T) * N; }
+            size_t rt_size() const { return sizeof(T) * N; }
+            auto run(Channel &c) { return read_until_into(c, until, (uint8_t*)dst, N, consume_last, {}); } 
+        };
 
         template<class C>
         concept is_functional_read_helper = requires{ typename C::functional_read_helper; };

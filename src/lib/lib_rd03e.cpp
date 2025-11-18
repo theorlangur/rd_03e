@@ -1,3 +1,6 @@
+#define FORCE_FMT
+#define PRINTF_FUNC(...) printk(__VA_ARGS__)
+
 #include <algorithm>
 #include <cstring>
 #include "lib_rd03e.h"
@@ -51,11 +54,15 @@ namespace ai_thinker
 
     RD03E::ExpectedResult RD03E::ReloadConfig()
     {
+        printk("RD03E::ReloadConfig: before open cmd\r\n");
         TRY_UART_COMM(OpenCommandMode(), "ReloadConfig", ErrorCode::SendCommand_Failed);
+        printk("RD03E::ReloadConfig: before update ver\r\n");
         TRY_UART_COMM(UpdateVersion(), "ReloadConfig", ErrorCode::SendCommand_Failed);
-        TRY_UART_COMM(SendCommandV2(Cmd::ReadBaseParams, to_send(), to_recv(m_Configuration.m_Base)), "ReloadConfig", ErrorCode::SendCommand_Failed);
-        TRY_UART_COMM(SendCommandV2(Cmd::GetMAC, to_send(uint16_t(0x0001)), to_recv(m_BluetoothMAC)), "ReloadConfig", ErrorCode::SendCommand_Failed);
+        printk("RD03E::ReloadConfig: before close\r\n");
+        //TRY_UART_COMM(SendCommandV2(Cmd::ReadBaseParams, to_send(), to_recv(m_Configuration.m_Base)), "ReloadConfig", ErrorCode::SendCommand_Failed);
+        //TRY_UART_COMM(SendCommandV2(Cmd::GetMAC, to_send(uint16_t(0x0001)), to_recv(m_BluetoothMAC)), "ReloadConfig", ErrorCode::SendCommand_Failed);
         TRY_UART_COMM(CloseCommandMode(), "ReloadConfig", ErrorCode::SendCommand_Failed);
+        printk("RD03E::ReloadConfig: done\r\n");
         return std::ref(*this);
     }
 
@@ -98,13 +105,24 @@ namespace ai_thinker
     {
         uint16_t protocol_version = 1;
         OpenCmdModeResponse r;
-        if (auto r = SendFrameV2(Cmd::OpenCmd, protocol_version); !r)
-            return std::unexpected(CmdErr{r.error(), 0});
-        k_sleep(Z_TIMEOUT_MS(100));
+        //if (auto r = SendFrameV2(Cmd::OpenCmd, protocol_version); !r)
+        //    return std::unexpected(CmdErr{r.error(), 0});
+        //k_sleep(Z_TIMEOUT_MS(100));
 
-        if (auto rs = SendCommandV2(Cmd::OpenCmd, to_send(protocol_version), to_recv(r.protocol_version, r.buffer_size)); !rs)
+        if (auto rs = SendCommandV2(Cmd::OpenCmd, to_send(protocol_version), to_recv(r.protocol_version)); !rs)
             return std::unexpected(rs.error());
 
+        uint8_t recvBuf[128];
+        //"system init finished!\r\n";
+        ScopeExit onExitStopReading = [&]{this->StopReading();};
+        if (auto r = AllowReadUpTo(recvBuf, sizeof(recvBuf)); !r)
+            return std::unexpected(CmdErr{r.error()});
+
+        using namespace uart::primitives;
+        if (auto r = match_bytes(*this, "system init finished!\r\n", "Matching sys init finish"); !r)
+            return std::unexpected(CmdErr{r.error()});
+
+        //TRY_UART_COMM(match_bytes(*this, kMotionDataFrameHeader, "Matching header"), "ReadFrameReadFrame", ErrorCode::SimpleData_Malformed);
         return OpenCmdModeRetVal{std::ref(*this), r};
     }
 
@@ -115,8 +133,7 @@ namespace ai_thinker
 
     RD03E::ExpectedGenericCmdResult RD03E::UpdateVersion()
     {
-        constexpr uint16_t kVersionBegin = 0x2412;
-        return SendCommandV2(Cmd::ReadVer, to_send(), to_recv(uart::primitives::match_t{kVersionBegin}, m_Version));
+        return SendCommandV2(Cmd::ReadVer, to_send(), to_recv(m_Version));
     }
 
     RD03E::ExpectedResult RD03E::ReadFrame()

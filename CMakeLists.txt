@@ -5,7 +5,7 @@ cmake_minimum_required(VERSION 3.20.0)
 set(EXTRA_DTC_OVERLAY_FILE "dts.overlay")
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(presence_rd_03e)
+project(presence_dfr_c4001)
 
 target_include_directories(app PRIVATE submodules/esp_generic_lib/include)
 

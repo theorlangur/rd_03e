@@ -3,7 +3,7 @@
 # west build --build-dir build_conv . --pristine --board nrf54l15dk/nrf54l15/cpuapp -- -DCONF_FILE=prj.conf --toolchain ${ZEPHYR_SDK_CMAKE_TOOLCHAIN_LLVM_PICO}
 # --board orlangur_ezurio_nrf54l15/nrf54l15/cpuapp -- \
 west build --build-dir build_ezurio_llvm . --pristine \
-    --board promicro_nrf52840/nrf52840/uf2 \
+    --board orlangur_ezurio_nrf54l15/nrf54l15/cpuapp -- \
     -DBOARD_ROOT=~/myapps/cpp/nrf \
     -DCONF_FILE="prj.conf config/cpp.conf config/zb.conf config/log.conf" \
     -DZEPHYR_TOOLCHAIN_VARIANT=llvm \

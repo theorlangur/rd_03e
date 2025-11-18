@@ -30,6 +30,11 @@
             "command": "./e.sh west flash -d build_ezurio_llvm --dev-id 802005000"
         },
         {
+            "label": "NRFUtil Reset",
+            "type": "shell",
+            "command": "nrfutil device reset"
+        },
+        {
             "label": "Flash OpenOCD",
             "type": "shell",
             "command": "./flash.exp"
