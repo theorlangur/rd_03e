@@ -30,6 +30,25 @@ namespace uart
 
         static const constexpr duration_ms_t kDefaultWait = duration_ms_t{-1};
 
+        class RxBlock
+        {
+        public:
+            RxBlock(Channel &c, uint8_t *pData, size_t len);
+            ~RxBlock();
+        private:
+            Channel &m_C;
+        };
+
+        class ChangeWait
+        {
+        public:
+            ChangeWait(Channel &c, duration_ms_t w);
+            ~ChangeWait();
+        private:
+            Channel &m_C;
+            duration_ms_t m_PrevWait;
+        };
+
         Channel(const struct device *pUART);
         ~Channel();
 
@@ -41,7 +60,7 @@ namespace uart
         ExpectedResult Open();
         ExpectedResult Close();
 
-        ExpectedResult AllowReadUpTo(uint8_t *pData, size_t len);
+        void AllowReadUpTo(uint8_t *pData, size_t len);
         void StopReading(bool dbg = false);
 
         ExpectedResult Send(const uint8_t *pData, size_t len);
@@ -64,6 +83,8 @@ namespace uart
         int uart_send();
         int uart_recv();
 
+        size_t ReadInternal(uint8_t *pBuf, size_t len);
+
         const struct device *m_pUART = nullptr;
         struct k_sem m_tx_sem;
         struct k_sem m_rx_sem;
@@ -71,6 +92,8 @@ namespace uart
         duration_ms_t m_DefaultWait{0};
         bool m_rx_disable_request = false;
         bool m_rx_enable_request = false;
+
+        bool m_rx_state = false;
 
         uint8_t m_UARTAsyncBufs[2][kUARTAsyncBufSize];
         int m_UARTAsyncBufNext = -1;

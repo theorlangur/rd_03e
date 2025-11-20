@@ -27,6 +27,7 @@ namespace dfr
     C4001::ExpectedResult C4001::ReloadConfig()
     {
         TRY_UART_COMM(StopSensor(), "ReloadConfig.StopSensor");
+        RxBlock rx(*this);
         TRY_UART_COMM(UpdateHWVersion(), "ReloadConfig.UpdateHWVersion");
         TRY_UART_COMM(UpdateSWVersion(), "ReloadConfig.UpdateSWVersion");
         TRY_UART_COMM(StartSensor(), "ReloadConfig.StartSensor");
@@ -54,7 +55,10 @@ namespace dfr
 
     C4001::ExpectedResult C4001::StartSensor()
     {
+        m_Dbg = true;
+        //ChangeWait longerWait(*this, 300);
         TRY_UART_COMM(SendCmd(kCmdSensorStart), "");
+        m_Dbg = false;
         return std::ref(*this);
     }
 

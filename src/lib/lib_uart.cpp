@@ -7,6 +7,29 @@
 
 namespace uart
 {
+    Channel::RxBlock::RxBlock(Channel &c, uint8_t *pData, size_t len):
+	m_C(c)
+    {
+	m_C.AllowReadUpTo(pData, len);
+    }
+
+    Channel::RxBlock::~RxBlock()
+    {
+	m_C.StopReading();
+    }
+
+    Channel::ChangeWait::ChangeWait(Channel &c, duration_ms_t w):
+	m_C(c)
+    {
+	m_PrevWait = m_C.GetDefaultWait();
+	m_C.SetDefaultWait(w);
+    }
+
+    Channel::ChangeWait::~ChangeWait()
+    {
+	m_C.SetDefaultWait(m_PrevWait);
+    }
+
     Channel::Channel(const struct device *pUART):
 	m_pUART(pUART)
     {
@@ -20,7 +43,8 @@ namespace uart
     {
 	uart_config cfg;
 	uart_config_get(m_pUART, &cfg);
-	m_UARTRxTimeoutUS = (1'000'000 * kUARTRxTimeoutBits) / cfg.baudrate;
+	//m_UARTRxTimeoutUS = (1'000'000 * kUARTRxTimeoutBits) / cfg.baudrate;
+	m_UARTRxTimeoutUS = 1'000 * m_DefaultWait;
 	if (m_UARTRxTimeoutUS == 0) m_UARTRxTimeoutUS = 4;
 
 	k_sem_init(&m_rx_sem, 0, 1);
@@ -70,10 +94,14 @@ namespace uart
 
 		if (pC->m_UARTAsyncBufNext != -1)
 		{
+		    pC->m_rx_state = true;
 		    pC->m_UARTAsyncBufNext ^= 1;
 		    uart_rx_buf_rsp(dev
 			    , pC->m_UARTAsyncBufs[pC->m_UARTAsyncBufNext]
 			    , kUARTAsyncBufSize);
+		}else
+		{
+		    //pC->m_rx_state = false;
 		}
 	    }
 	    break;
@@ -85,6 +113,8 @@ namespace uart
 		}
 		break;
 	    case UART_RX_DISABLED:
+		pC->m_rx_state = false;
+		pC->m_UARTAsyncBufNext = -1;
 		k_sem_give(&pC->m_rx_ctrl);
 		break;
 	    case UART_RX_RDY:
@@ -103,10 +133,7 @@ namespace uart
 
 			int left = pC->m_InternalRecvBufLen - pC->m_InternalRecvBufNextWrite;
 			if (left <= to_write) 
-			{
-			    pC->m_UARTAsyncBufNext = -1;
 			    to_write = left;
-			}
 
 			if (to_write)
 			{
@@ -137,7 +164,15 @@ namespace uart
 		}
 		break;
 	    case UART_RX_STOPPED:
-		//printk("rx stopped\r\n");
+		if (!pC->m_rx_disable_request && pC->m_pInternalRecvBuf && pC->m_UARTAsyncBufNext != -1)
+		{
+		    pC->m_rx_state = false;
+		    pC->m_UARTAsyncBufNext = 0;
+		    uart_rx_enable(dev
+			    , pC->m_UARTAsyncBufs[0]
+			    , kUARTAsyncBufSize
+			    , pC->m_UARTRxTimeoutUS);
+		}
 		break;
 	}
     }
@@ -165,14 +200,17 @@ namespace uart
     Channel::ExpectedResult Channel::Send(const uint8_t *pData, size_t len)
     {
 	CALL_WITH_EXPECTED("Channel::Send", k_sem_take(&m_tx_sem, Z_TIMEOUT_MS(m_DefaultWait)));
-	//FMT_PRINTLN("Channel::Send: {}", std::span<const uint8_t>{pData, len});
+	if (m_Dbg)
+	{
+	    FMT_PRINTLN("Channel::Send: {}", std::span<const uint8_t>{pData, len});
+	}
 	m_pSendBuf = pData;
 	m_SendLen = len;
 	CALL_WITH_EXPECTED("Channel::Send (uart_tx)", uart_tx(m_pUART, pData, len, SYS_FOREVER_US));
 	return std::ref(*this);
     }
 
-    Channel::ExpectedResult Channel::AllowReadUpTo(uint8_t *pData, size_t len)
+    void Channel::AllowReadUpTo(uint8_t *pData, size_t len)
     {
 	FMT_PRINTLN("Channel::AllowReadUpTo: {}", len);
 	m_pInternalRecvBuf = pData;
@@ -181,9 +219,6 @@ namespace uart
         m_InternalRecvBufNextRead = 0;
 	m_UARTAsyncBufNext = 0;
 	m_rx_enable_request = true;
-	//CALL_WITH_EXPECTED("Channel::AllowReadUpTo", uart_rx_enable(m_pUART, m_UARTAsyncBufs[0], kUARTAsyncBufSize, kUARTRxTimeoutUS));
-	//uart_irq_rx_enable(m_pUART);
-	return std::ref(*this);
     }
 
     void Channel::StopReading(bool dbg)
@@ -216,6 +251,29 @@ namespace uart
 	m_UARTAsyncBufNext = -1;
     }
 
+    size_t Channel::ReadInternal(uint8_t *pBuf, size_t len)
+    {
+	int read_bytes = 0;
+	if (m_InternalRecvBufNextRead > m_InternalRecvBufNextWrite)
+	{
+	    int avail = m_InternalRecvBufLen - m_InternalRecvBufNextRead;
+	    int n = std::min(avail, (int)len);
+	    memcpy(pBuf, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
+	    m_InternalRecvBufNextRead = (m_InternalRecvBufNextRead + n) % m_InternalRecvBufLen;
+	    read_bytes += n;
+	    if (read_bytes == len)
+		return n;
+	}
+
+	int avail = m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead;
+	int left = len - read_bytes;
+	int n = std::min(avail, left);
+	memcpy(pBuf + read_bytes, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
+	m_InternalRecvBufNextRead += n;
+	read_bytes += n;
+	return read_bytes;
+    }
+
     Channel::ExpectedValue<size_t> Channel::Read(uint8_t *pBuf, size_t len, duration_ms_t wait)
     {
 	m_Overflow = false;
@@ -242,31 +300,34 @@ namespace uart
 
 	if (m_pInternalRecvBuf)
 	{
-	    int avail = m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead;
-	    int left = len;
-	    int n = std::min(avail, left);
-	    memcpy(pBuf, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
-	    m_InternalRecvBufNextRead += n;
-	    left -= n;
-	    if (!left)
+	    int read = ReadInternal(pBuf, len);
+	    if (read == len)
 		return RetVal<size_t>{*this, len};
 	    if (wait == 0)
-		return RetVal<size_t>{*this, size_t(n)};
-	    if (left > (m_InternalRecvBufLen - m_InternalRecvBufNextRead))
+		return RetVal<size_t>{*this, size_t(read)};
+
+	    if (m_UARTAsyncBufNext == -1)
 	    {
-		//error. wanting to read more than possible
-		return std::unexpected(Err{"Channel::Read(too much)", 0});
+		printk("Read: restarting recv\r\n");
+		m_UARTAsyncBufNext = 0;
+		uart_rx_enable(m_pUART, m_UARTAsyncBufs[0], kUARTAsyncBufSize, m_UARTRxTimeoutUS);
 	    }
 
+	    //FMT_PRINTLN("Read len: {}; read: {}", len, read);
+	    pBuf += read;
+	    int left = (int)len - read;
 	    while(left)
 	    {
-		//uart_irq_rx_enable(m_pUART);
-		CALL_WITH_EXPECTED("Channel::Read(internal)", k_sem_take(&m_rx_sem, Z_TIMEOUT_MS(wait)));
-		avail = m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead;
-		n = std::min(avail, left);
-		memcpy(pBuf, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
-		m_InternalRecvBufNextRead += n;
-		left -= n;
+		//CALL_WITH_EXPECTED("Channel::Read(internal)", k_sem_take(&m_rx_sem, Z_TIMEOUT_MS(wait)));
+		if (auto err = k_sem_take(&m_rx_sem, Z_TIMEOUT_MS(wait)); err != 0)
+		{
+		    printk("Read failed. write pos: %d; read pos: %d; (buf idx=%d; state=%d)\r\n", m_InternalRecvBufNextWrite, m_InternalRecvBufNextRead, m_UARTAsyncBufNext, m_rx_state);
+		    //FMT_PRINTLN("Read failed. write pos: {}; read pos: {}; (buf idx={})", m_InternalRecvBufNextWrite, m_InternalRecvBufNextRead, m_UARTAsyncBufNext);
+		    return std::unexpected(Err{"Channel::Read(internal)", err});
+		}
+		int read = ReadInternal(pBuf, left);
+		pBuf += read;
+		left -= read;
 	    }
 	    return RetVal<size_t>{*this, len};
 	}

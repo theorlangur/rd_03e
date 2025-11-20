@@ -159,7 +159,6 @@ namespace dfr
                 //k_msleep(50);
             }
 
-            uint8_t m_recvBuf[128];
             template<class... ToSend> 
             ExpectedResult SendCmdNoResp(ToSend&&...args) 
             { 
@@ -203,9 +202,8 @@ namespace dfr
                 (send_one(std::forward<ToSend>(args)),...);
                 TRY_UART_COMM(_r, "SendArgs");
 
-                ScopeExit onExitStopReading = [&]{ DrainAndStop(); };
-                if (auto r = AllowReadUpTo(m_recvBuf, sizeof(m_recvBuf)); !r)
-                    return std::unexpected(Err{r.error()});
+                //ScopeExit onExitStopReading = [&]{ DrainAndStop(); };
+                //AllowReadUpTo(m_recvBuf, sizeof(m_recvBuf));
 
                 TRY_UART_COMM(Sendable<decltype("\r\n")>::send(*this, "\r\n"), "<endl>");
 
@@ -241,9 +239,8 @@ namespace dfr
                 send_tuple(std::make_index_sequence<sizeof...(ToSend)>());
                 TRY_UART_COMM(_r, "SendArgs");
 
-                ScopeExit onExitStopReading = [&]{ DrainAndStop(); };
-                if (auto r = AllowReadUpTo(m_recvBuf, sizeof(m_recvBuf)); !r)
-                    return std::unexpected(Err{r.error()});
+                //ScopeExit onExitStopReading = [&]{ DrainAndStop(); };
+                //AllowReadUpTo(m_recvBuf, sizeof(m_recvBuf));
 
                 TRY_UART_COMM(SendTpl("\r\n"), "<endl>");
 
@@ -279,9 +276,14 @@ namespace dfr
             Version m_HWVersion;
             Version m_SWVersion;
 
-            //the data will be read into as is
-            //PresenceData m_PresenceData;
+            class RxBlock: public Channel::RxBlock
+            {
+            public:
+                RxBlock(C4001 &c):Channel::RxBlock(c, c.m_recvBuf, sizeof(c.m_recvBuf)){}
+            private:
+            };
 
+            uint8_t m_recvBuf[128];
         public:
             bool m_dbg = false;
     };

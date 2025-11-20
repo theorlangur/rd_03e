@@ -114,7 +114,7 @@ int main(void)
 
 	dfr::C4001 c4001(rd_uart);
 	printk("before init\r\n");
-	k_msleep(1000);
+	k_msleep(01*1000);
 	auto r = c4001.Init();
 	if (!r)
 	{
