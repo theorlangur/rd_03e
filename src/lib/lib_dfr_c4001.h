@@ -99,48 +99,50 @@ namespace dfr
             constexpr static const uint8_t kCmdSensorStart[] = "sensorStart";
             constexpr static const uint8_t kCmdGetHWVersion[] = "getHWV";
             constexpr static const uint8_t kCmdGetSWVersion[] = "getSWV";
+            constexpr static const uint8_t kCmdSaveConfig[] = "saveConfig";
+            constexpr static const uint8_t kCmdResetConfig[] = "resetCfg";
+            constexpr static const uint8_t kCmdRestart[] = "resetSystem";
+            constexpr static const uint8_t kCmdSetRunApp[] = "setRunApp";
 
-            template<class E>
-            static ExpectedResult to_result(E &&e, const char* pLocation)
+            constexpr static const uint8_t kCmdRestartParamNormal[] = "0";
+            constexpr static const uint8_t kCmdRestartParamBootloader[] = "1";
+
+            constexpr static const uint8_t kCmdAppModePresence[] = "0";
+            constexpr static const uint8_t kCmdAppModeSpeedDistance[] = "1";
+
+            constexpr static const uint8_t kCmdSetInhibit[] = "setInhibit";
+            constexpr static const uint8_t kCmdGetInhibit[] = "getInhibit";
+
+            template<class Ret>
+            struct result
             {
-                using PureE = std::remove_cvref_t<E>;
-                if constexpr(is_expected_type_v<PureE>)
+                template<class E>
+                static Ret to(E &&e, const char* pLocation)
                 {
-                    if constexpr (std::is_same_v<PureE, ExpectedResult>)
-                        return std::move(e);
+                    using PureE = std::remove_cvref_t<E>;
+                    if constexpr(is_expected_type_v<PureE>)
+                    {
+                        if constexpr (std::is_same_v<PureE, Ret>)
+                            return std::move(e);
+                        else
+                            return to(e.error(), pLocation);
+                    }else if constexpr (std::is_same_v<PureE,::Err>)
+                        return Ret(std::unexpected(Err{e, pLocation}));
+                    else if constexpr (std::is_same_v<PureE,Err>)
+                        return Ret(std::unexpected(e));
+                    else if constexpr (std::is_same_v<PureE,CmdErr>)
+                        return Ret(std::unexpected(e.e));
                     else
-                        return to_result(e.error(), pLocation);
-                }else if constexpr (std::is_same_v<PureE,::Err>)
-                    return ExpectedResult(std::unexpected(Err{e, pLocation}));
-                else if constexpr (std::is_same_v<PureE,Err>)
-                    return ExpectedResult(std::unexpected(e));
-                else if constexpr (std::is_same_v<PureE,CmdErr>)
-                    return ExpectedResult(std::unexpected(e.e));
-                else
-                {
-                    static_assert(std::is_same_v<PureE,Err>, "Don't know how to convert passed type");
-                    return ExpectedResult(std::unexpected(Err{}));
+                    {
+                        static_assert(std::is_same_v<PureE,Err>, "Don't know how to convert passed type");
+                        return Ret(std::unexpected(Err{}));
+                    }
                 }
-            }
+            };
 
 #define TRY_UART_COMM(f, location) \
             if (auto r = f; !r) \
-            return to_result(std::move(r), location)
-
-#define TRY_UART_COMM_CMD(f, location) \
-            if (auto r = f; !r) \
-            return to_cmd_result(std::move(r), location)
-
-#define TRY_UART_COMM_CMD_WITH_RETRY(f, location) \
-            if (auto r = f; !r) \
-            {\
-                if (retry) \
-                {\
-                    FMT_PRINTLN("Failed on " #f);\
-                    continue;\
-                }\
-                return to_cmd_result(std::move(r), location);\
-            }
+                return result<ExpectedResult>::to(std::move(r), location)
 
             template<class... ToSend> static auto to_send(ToSend&&...args) { return std::forward_as_tuple(std::forward<ToSend>(args)...); }
             template<class... ToRecv> static auto to_recv(ToRecv&&...args) { return std::forward_as_tuple(std::forward<ToRecv>(args)...); }
@@ -150,13 +152,6 @@ namespace dfr
             {
                 TRY_UART_COMM(Sendable<ToSend>::send(*this, arg), "SendTpl");
                 return std::ref(*this);
-            }
-
-            void DrainAndStop()
-            {
-                //[[maybe_unused]]auto r = uart::primitives::drain(*this, {.maxWait = 50});
-                StopReading();
-                //k_msleep(50);
             }
 
             template<class... ToSend> 
@@ -202,9 +197,6 @@ namespace dfr
                 (send_one(std::forward<ToSend>(args)),...);
                 TRY_UART_COMM(_r, "SendArgs");
 
-                //ScopeExit onExitStopReading = [&]{ DrainAndStop(); };
-                //AllowReadUpTo(m_recvBuf, sizeof(m_recvBuf));
-
                 TRY_UART_COMM(Sendable<decltype("\r\n")>::send(*this, "\r\n"), "<endl>");
 
                 //wait for an answer
@@ -238,10 +230,6 @@ namespace dfr
                 };
                 send_tuple(std::make_index_sequence<sizeof...(ToSend)>());
                 TRY_UART_COMM(_r, "SendArgs");
-
-                //ScopeExit onExitStopReading = [&]{ DrainAndStop(); };
-                //AllowReadUpTo(m_recvBuf, sizeof(m_recvBuf));
-
                 TRY_UART_COMM(SendTpl("\r\n"), "<endl>");
 
                 auto recv_tuple = [&]<size_t... idx>(std::index_sequence<idx...>)
@@ -263,13 +251,8 @@ namespace dfr
                 return std::ref(*this);
             }
 
-            ExpectedResult StopSensor();
-            ExpectedResult StartSensor();
-
-            ExpectedResult UpdateHWVersion();
-            ExpectedResult UpdateSWVersion();
-
             ExpectedResult ReadFrame();
+            
             //data
             //Version m_Version;
             //Configuration m_Configuration;
@@ -284,8 +267,45 @@ namespace dfr
             };
 
             uint8_t m_recvBuf[128];
+
+            float m_Inhibit = 1;
         public:
-            bool m_dbg = false;
+            class Configurator
+            {
+            public:
+                using Ref = std::reference_wrapper<Configurator>;
+                using ExpectedResult = std::expected<Ref, Err>;
+
+                ExpectedResult End();
+
+                ExpectedResult SaveConfig();
+                ExpectedResult ResetConfig();
+                ExpectedResult Restart();
+                ExpectedResult SwitchToPresenceMode();
+                ExpectedResult SwitchToSpeedDistanceMode();
+                ExpectedResult UpdateInhibit();
+                ExpectedResult SetInhibit(float v);
+            private:
+                Configurator(C4001 &c);
+
+                ExpectedResult StopSensor();
+                ExpectedResult StartSensor();
+
+                ExpectedResult UpdateHWVersion();
+                ExpectedResult UpdateSWVersion();
+
+                C4001 &m_C;
+                RxBlock m_RxBlock;
+                ExpectedResult m_CtrResult;
+
+                friend class C4001;
+            };
+
+            Configurator GetConfigurator();
+        private:
+#define TRY_UART_CFG(f, location) \
+            if (auto r = f; !r) \
+                return result<Configurator::ExpectedResult>::to(std::move(r), location)
     };
 }
 

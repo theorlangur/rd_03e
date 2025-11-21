@@ -35,8 +35,11 @@ namespace uart
         public:
             RxBlock(Channel &c, uint8_t *pData, size_t len);
             ~RxBlock();
+
+            void Stop();
         private:
             Channel &m_C;
+            bool m_Stopped = false;
         };
 
         class ChangeWait

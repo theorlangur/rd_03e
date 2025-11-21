@@ -15,7 +15,16 @@ namespace uart
 
     Channel::RxBlock::~RxBlock()
     {
-	m_C.StopReading();
+	Stop();
+    }
+
+    void Channel::RxBlock::Stop()
+    {
+	if (!m_Stopped)
+	{
+	    m_Stopped = true;
+	    m_C.StopReading();
+	}
     }
 
     Channel::ChangeWait::ChangeWait(Channel &c, duration_ms_t w):
