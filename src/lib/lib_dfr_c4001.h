@@ -99,6 +99,8 @@ namespace dfr
             auto GetTriggerDistance() const { return m_TrigRange; }
             auto GetDetectLatency() const { return m_DetectLatency; }
             auto GetClearLatency() const { return m_ClearLatency; }
+            auto GetSensitivityHold() const { return m_SensitivityHold; }
+            auto GetSensitivityTrig() const { return m_SensitivityTrigger; }
         private:
 
             constexpr static const uint8_t kCmdSensorStop[] = "sensorStop";

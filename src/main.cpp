@@ -127,6 +127,9 @@ int main(void)
 		FMT_PRINTLN("swver={}", (const char*)c4001.GetSWVer().m_Version);
 		FMT_PRINTLN("inhibit={:.2}", c4001.GetInhibitDuration());
 		FMT_PRINTLN("range={:.1}-{:.1}", c4001.GetRangeFrom(), c4001.GetRangeTo());
+		FMT_PRINTLN("trig range={:.1}", c4001.GetTriggerDistance());
+		FMT_PRINTLN("sens hold={:.1}; sens trig={:.1}", c4001.GetSensitivityHold(), c4001.GetSensitivityTrig());
+		FMT_PRINTLN("latency detect={:.1}; clear={:.1}", c4001.GetDetectLatency(), c4001.GetClearLatency());
 	}
 
 	printk("sleeping...\r\n");
