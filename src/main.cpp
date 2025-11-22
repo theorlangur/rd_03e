@@ -28,57 +28,23 @@
  * See the sample documentation for information on how to fix this.
  */
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-
-//constinit const struct device *rd03e = DEVICE_DT_GET(DT_NODELABEL(rd03e));
-//constinit const struct device *rd_uart = nullptr;
 constinit const struct device *rd_uart = DEVICE_DT_GET(DT_NODELABEL(uart30));
-constinit const struct device *uart22 = nullptr;//DEVICE_DT_GET(DT_NODELABEL(uart22));
 
-uint8_t uart_buf[2][4];
-int uart_buf_idx = 0;
-constexpr static size_t rx_size = 1024;
-uint8_t rx_buf[rx_size];
-int rx_write = 0;
-int rx_read = 0;
-void uart_async_callback(const struct device *dev, uart_event *evt, void *user_data)
+///* Get the node from the alias */
+#define SENSOR_NODE DT_ALIAS(presence)
+
+/* Get the GPIO spec directly from the node */
+/* Note: We look for the property "gpios" inside the node */
+static const struct gpio_dt_spec presence = GPIO_DT_SPEC_GET(SENSOR_NODE, gpios);
+
+gpio_callback g_cb;
+
+void presence_triggered(const struct device *port,
+					struct gpio_callback *cb,
+					gpio_port_pins_t pins)
 {
-	switch(evt->type)
-	{
-	    case UART_TX_ABORTED:
-		break;
-	    case UART_TX_DONE:
-	    break;
-	    case UART_RX_BUF_REQUEST:
-	    {
-		if (uart_buf_idx != -1)
-		{
-		    uart_buf_idx ^= 1;
-		    uart_rx_buf_rsp(dev
-			    , uart_buf[uart_buf_idx]
-			    , 4);
-		}
-	    }
-	    break;
-	    case UART_RX_BUF_RELEASED:
-		//printk("rx buf rel\r\n");
-		break;
-	    case UART_RX_DISABLED:
-		printk("rx buf dis\r\n");
-		break;
-	    case UART_RX_RDY:
-		{
-			//FMT_PRINTLN("rx: {}", std::span<const uint8_t>{evt->data.rx.buf + evt->data.rx.offset, (size_t)evt->data.rx.len});
-			for(int i = 0; i < evt->data.rx.len; ++i)
-			{
-				rx_buf[rx_write] = (evt->data.rx.buf + evt->data.rx.offset)[i];
-				rx_write = (rx_write + 1) % rx_size;
-			}
-		}
-		break;
-	    case UART_RX_STOPPED:
-		printk("rx stopped\r\n");
-		break;
-	}
+	int val = gpio_pin_get_dt(&presence);
+	gpio_pin_set_dt(&led, val);
 }
 
 int main(void)
@@ -86,35 +52,7 @@ int main(void)
 	FMT_PRINTLN("main. start");
 	k_msleep(1000);
 
-	//struct uart_config uart_cfg;
-	//uart_config_get(rd_uart, &uart_cfg);
-	//uart_cfg.baudrate = 9600;
-	//int uart_err = uart_configure(rd_uart, &uart_cfg);
-	//FMT_PRINTLN("uart config res={}; baudrate={:x}", uart_err, uart_cfg.baudrate);
-	//k_msleep(1000);
-
-	//uart_callback_set(rd_uart, uart_async_callback, nullptr);
-	//printk("starting rx\r\n");
-	//uart_rx_enable(rd_uart, uart_buf[0], 4, SYS_FOREVER_US);
-	//while(true)
-	//{
-	//	k_msleep(1000);
-	//	bool empty = true;
-	//	while(rx_read != rx_write)
-	//	{
-	//		printk("%X ", rx_buf[rx_read++]);
-	//		empty = false;
-	//	}
-	//	if (!empty)
-	//		printk("\r\n");
-	//}
-	//
-	//printk("attempt to talk uart\r\n");
-	//k_msleep(1000);
-
 	dfr::C4001 c4001(rd_uart);
-	printk("before init\r\n");
-	k_msleep(01*1000);
 	auto r = c4001.Init();
 	if (!r)
 	{
@@ -132,8 +70,21 @@ int main(void)
 		FMT_PRINTLN("latency detect={:.1}; clear={:.1}", c4001.GetDetectLatency(), c4001.GetClearLatency());
 	}
 
+	gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+	int err = gpio_pin_configure_dt(&presence, GPIO_INPUT);
+	if (err != 0)
+		printk("gpio_pin_configure_dt: %d\r\n", err);
+	gpio_pin_set_dt(&led, 0);
+
+	err = gpio_pin_interrupt_configure_dt(&presence, GPIO_INT_EDGE_BOTH);
+	if (err != 0)
+		printk("gpio_pin_interrupt_configure_dt: %d\r\n", err);
+	gpio_init_callback(&g_cb, presence_triggered, BIT(presence.pin));
+	gpio_add_callback_dt(&presence, &g_cb);
+
 	printk("sleeping...\r\n");
-	k_msleep(100000);
+	while(true)
+		k_msleep(100000);
 	return 0;
 
 	int ret;
@@ -142,6 +93,7 @@ int main(void)
 	if (!gpio_is_ready_dt(&led)) {
 		return 0;
 	}
+	//ret = gpio_pin_configure();
 
 	ret = gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
 	if (ret < 0) {
