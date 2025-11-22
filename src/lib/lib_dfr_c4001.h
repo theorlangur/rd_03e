@@ -96,6 +96,9 @@ namespace dfr
             auto GetInhibitDuration() const { return m_Inhibit; }
             auto GetRangeFrom() const { return m_MinRange; }
             auto GetRangeTo() const { return m_MaxRange; }
+            auto GetTriggerDistance() const { return m_TrigRange; }
+            auto GetDetectLatency() const { return m_DetectLatency; }
+            auto GetClearLatency() const { return m_ClearLatency; }
         private:
 
             constexpr static const uint8_t kCmdSensorStop[] = "sensorStop";
@@ -118,6 +121,15 @@ namespace dfr
 
             constexpr static const uint8_t kCmdSetRange[] = "setRange";
             constexpr static const uint8_t kCmdGetRange[] = "getRange";
+
+            constexpr static const uint8_t kCmdSetTrigRange[] = "setTrigRange";
+            constexpr static const uint8_t kCmdGetTrigRange[] = "getTrigRange";
+
+            constexpr static const uint8_t kCmdSetSensitivity[] = "setSensitivity";
+            constexpr static const uint8_t kCmdGetSensitivity[] = "getSensitivity";
+
+            constexpr static const uint8_t kCmdSetLatency[] = "setLatency";
+            constexpr static const uint8_t kCmdGetLatency[] = "getLatency";
 
             template<class Ret>
             struct result
@@ -298,6 +310,13 @@ namespace dfr
             float m_Inhibit = 2;
             float m_MinRange = 1.6f;
             float m_MaxRange = 25.f;
+            float m_TrigRange = 0.f;
+
+            uint8_t m_SensitivityTrigger = 0;
+            uint8_t m_SensitivityHold = 0;
+
+            float m_DetectLatency = 0.f;
+            float m_ClearLatency = 0.f;
         public:
             class Configurator
             {
@@ -317,6 +336,17 @@ namespace dfr
 
                 ExpectedResult UpdateRange() noexcept;
                 ExpectedResult SetRange(float from, float to) noexcept;
+
+                ExpectedResult UpdateTrigRange();
+                ExpectedResult SetTrigRange(float v);
+
+                ExpectedResult UpdateSensitivity();
+                ExpectedResult SetSensitivity(uint8_t trig, uint8_t hold);
+                ExpectedResult SetSensitivityTrig(uint8_t val);
+                ExpectedResult SetSensitivityHold(uint8_t val);
+
+                ExpectedResult UpdateLatency();
+                ExpectedResult SetLatency(float detect, float clear);
             private:
                 Configurator(C4001 &c);
 
