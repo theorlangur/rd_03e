@@ -93,6 +93,9 @@ namespace dfr
 
             const Version& GetHWVer() const { return m_HWVersion; }
             const Version& GetSWVer() const { return m_SWVersion; }
+            auto GetInhibitDuration() const { return m_Inhibit; }
+            auto GetRangeFrom() const { return m_MinRange; }
+            auto GetRangeTo() const { return m_MaxRange; }
         private:
 
             constexpr static const uint8_t kCmdSensorStop[] = "sensorStop";
@@ -112,6 +115,9 @@ namespace dfr
 
             constexpr static const uint8_t kCmdSetInhibit[] = "setInhibit";
             constexpr static const uint8_t kCmdGetInhibit[] = "getInhibit";
+
+            constexpr static const uint8_t kCmdSetRange[] = "setRange";
+            constexpr static const uint8_t kCmdGetRange[] = "getRange";
 
             template<class Ret>
             struct result
@@ -237,18 +243,39 @@ namespace dfr
                     return uart::primitives::read_any(*this, std::get<idx>(torecv)...);
                 };
 
-                FMT_PRINTLN("Receiving params");
+                printk("Receiving params\r\n");
                 TRY_UART_COMM(recv_tuple(std::make_index_sequence<sizeof...(ToRecv)>()), "SendCmdWithParams");
 
-                FMT_PRINTLN("Received. Receiving Done or Error");
+                printk("Received. Receiving Done or Error\r\n");
                 //wait for a final 'Done'
                 using namespace uart::primitives;
                 if (auto r = find_any_str({}, *this, "Done\r\n", "Error\r\n"); !r)
                     return std::unexpected(Err{r.error()});
                 else if (r->v != 0)//not 'Done', but 'Error'
                     return std::unexpected(Err{{"SendCmd Error"}});
-                FMT_PRINTLN("Done");
+                printk("Done\r\n");
                 return std::ref(*this);
+            }
+
+            template<class... ToSend, class... ToRecv> 
+            ExpectedResult SendCmdWithParamsStd(std::tuple<ToSend...> tosend, std::tuple<ToRecv...> torecv, bool dbg = false) 
+            { 
+                static_assert(sizeof...(ToSend) > 0);
+                constexpr auto isUint8 = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, uint8_t*>;
+                constexpr auto isConstUint8 = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, const uint8_t*>;
+                constexpr auto isChar = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, char*>;
+                constexpr auto isConstChar = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, const char*>;
+                static_assert(isUint8 || isConstUint8 || isChar || isConstChar);
+
+                const char *pCmd = (const char*)std::get<0>(tosend);
+                using namespace uart::primitives;
+                return SendCmdWithParams(
+                        std::move(tosend),
+                        std::tuple_cat(to_recv(
+                                    find_str_t{pCmd},
+                                    find_str_t{"Response "})
+                                , torecv)
+                    );
             }
 
             ExpectedResult ReadFrame();
@@ -268,7 +295,9 @@ namespace dfr
 
             uint8_t m_recvBuf[128];
 
-            float m_Inhibit = 1;
+            float m_Inhibit = 2;
+            float m_MinRange = 1.6f;
+            float m_MaxRange = 25.f;
         public:
             class Configurator
             {
@@ -278,13 +307,16 @@ namespace dfr
 
                 ExpectedResult End();
 
-                ExpectedResult SaveConfig();
-                ExpectedResult ResetConfig();
-                ExpectedResult Restart();
-                ExpectedResult SwitchToPresenceMode();
-                ExpectedResult SwitchToSpeedDistanceMode();
-                ExpectedResult UpdateInhibit();
-                ExpectedResult SetInhibit(float v);
+                ExpectedResult SaveConfig() noexcept;
+                ExpectedResult ResetConfig() noexcept;
+                ExpectedResult Restart() noexcept;
+                ExpectedResult SwitchToPresenceMode() noexcept;
+                ExpectedResult SwitchToSpeedDistanceMode() noexcept;
+                ExpectedResult UpdateInhibit() noexcept;
+                ExpectedResult SetInhibit(float v) noexcept;
+
+                ExpectedResult UpdateRange() noexcept;
+                ExpectedResult SetRange(float from, float to) noexcept;
             private:
                 Configurator(C4001 &c);
 

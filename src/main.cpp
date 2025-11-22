@@ -122,10 +122,11 @@ int main(void)
 	}else
 	{
 		printk("getting version\r\n");
-		k_msleep(1000);
 		//auto ver = rd03e.GetVersion();
 		FMT_PRINTLN("hwver={}", (const char*)c4001.GetHWVer().m_Version);
 		FMT_PRINTLN("swver={}", (const char*)c4001.GetSWVer().m_Version);
+		FMT_PRINTLN("inhibit={:.2}", c4001.GetInhibitDuration());
+		FMT_PRINTLN("range={:.1}-{:.1}", c4001.GetRangeFrom(), c4001.GetRangeTo());
 	}
 
 	printk("sleeping...\r\n");

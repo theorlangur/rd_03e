@@ -35,6 +35,8 @@ namespace dfr
         auto cfg = GetConfigurator();
         cfg.UpdateHWVersion();
         cfg.UpdateSWVersion();
+        cfg.UpdateInhibit();
+        cfg.UpdateRange();
         auto r = cfg.End();
         if (!r)
             return result<ExpectedResult>::to(std::move(r.error()), "ReloadConfig");
@@ -63,19 +65,78 @@ namespace dfr
             m_CtrResult = result<ExpectedResult>::to(std::move(r),  "Configurator::Configurator");
     }
 
-    auto C4001::Configurator::UpdateInhibit() -> ExpectedResult
+    struct read_float_cfg_t
+    {
+        float min = 0;
+        float max = 0;
+        size_t N = 16;
+    };
+    template<read_float_cfg_t cfg = {}>
+    struct read_float_from_str_t
+    {
+        using functional_read_helper = void;
+        float &dstVar;
+        char until = ' ';
+        char dstStr[cfg.N];
+        bool consume_last = true;
+
+        static constexpr size_t size() { return cfg.N; }
+        size_t rt_size() const { return cfg.N; }
+        auto run(uart::Channel &c) { 
+            using ExpectedResult = std::expected<uart::Channel::Ref, ::Err>;
+            auto r = uart::primitives::read_until_into(c, until, (uint8_t*)dstStr, cfg.N, consume_last, {}); 
+            if (!r) return r;
+            char *pEnd = dstStr + cfg.N;
+            dstVar = strtof(dstStr, &pEnd);
+            if (dstStr == pEnd)
+            {
+                //nothing was read to convert
+                return ExpectedResult(std::unexpected(::Err{"failed to convert"}));
+            }
+            if (cfg.min != cfg.max)
+            {
+                if (dstVar < cfg.min || dstVar > cfg.max)
+                    return ExpectedResult(std::unexpected(::Err{"failed validation"}));
+            }
+            return r;
+        } 
+    };
+
+    auto C4001::Configurator::UpdateRange() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         using namespace uart::primitives;
-        char valStr[16];
-        TRY_UART_CFG(m_C.SendCmdWithParams(to_send(kCmdGetInhibit), to_recv(
-                        read_until_t{valStr, '\r'}
-                        )), "");
-        std::from_chars(std::begin(valStr), std::end(valStr), m_C.m_Inhibit);
+        read_float_from_str_t<{.min = 0.6, .max = 25}> readFrom{m_C.m_MinRange, ' '};
+        read_float_from_str_t<{.min = 0.6, .max = 25}> readTo{m_C.m_MaxRange, '\r'};
+        TRY_UART_CFG(m_C.SendCmdWithParamsStd(
+                        to_send(kCmdGetRange), 
+                        to_recv(readFrom, readTo)), "");
         return std::ref(*this);
     }
 
-    auto C4001::Configurator::SetInhibit(float v) -> ExpectedResult
+    auto C4001::Configurator::SetRange(float from, float to) noexcept -> ExpectedResult
+    {
+        if (!m_CtrResult) return m_CtrResult;
+        char buf[16]; 
+        tools::format_to(tools::BufferFormatter(buf), "{:.1} {:.1}", from, to);
+        TRY_UART_CFG(m_C.SendCmd(kCmdSetRange), (const char*)buf);
+
+        return std::ref(*this);
+    }
+
+    auto C4001::Configurator::UpdateInhibit() noexcept -> ExpectedResult
+    {
+        if (!m_CtrResult) return m_CtrResult;
+        using namespace uart::primitives;
+        read_float_from_str_t<{.min = 0, .max = 255}> readInhibit{m_C.m_Inhibit, '\r'};
+        TRY_UART_CFG(m_C.SendCmdWithParamsStd(
+                        to_send(kCmdGetInhibit), 
+                        to_recv(readInhibit)), "");
+
+        return std::ref(*this);
+    }
+
+    auto C4001::Configurator::SetInhibit(float v) noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         char buf[16]; 
@@ -84,7 +145,7 @@ namespace dfr
         return std::ref(*this);
     }
 
-    auto C4001::Configurator::SwitchToPresenceMode() -> ExpectedResult
+    auto C4001::Configurator::SwitchToPresenceMode() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         TRY_UART_CFG(m_C.SendCmdNoResp(kCmdSetRunApp, kCmdAppModePresence), "");
@@ -92,7 +153,7 @@ namespace dfr
         return std::ref(*this);
     }
 
-    auto C4001::Configurator::SwitchToSpeedDistanceMode() -> ExpectedResult
+    auto C4001::Configurator::SwitchToSpeedDistanceMode() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         TRY_UART_CFG(m_C.SendCmdNoResp(kCmdSetRunApp, kCmdAppModeSpeedDistance), "");
@@ -100,7 +161,7 @@ namespace dfr
         return std::ref(*this);
     }
 
-    auto C4001::Configurator::Restart() -> ExpectedResult
+    auto C4001::Configurator::Restart() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         TRY_UART_CFG(m_C.SendCmdNoResp(kCmdRestart, kCmdRestartParamNormal), "");
@@ -108,14 +169,14 @@ namespace dfr
         return std::ref(*this);
     }
 
-    auto C4001::Configurator::SaveConfig() -> ExpectedResult
+    auto C4001::Configurator::SaveConfig() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         TRY_UART_CFG(m_C.SendCmd(kCmdSaveConfig), "");
         return std::ref(*this);
     }
 
-    auto C4001::Configurator::ResetConfig() -> ExpectedResult
+    auto C4001::Configurator::ResetConfig() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
         TRY_UART_CFG(m_C.SendCmd(kCmdResetConfig), "");
