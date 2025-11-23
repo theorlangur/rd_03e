@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cstring>
+#include <cstdlib>
 #include "lib_dfr_c4001.h"
 #include "lib_misc_helpers.hpp"
 
@@ -38,6 +39,7 @@ namespace dfr
             auto r = uart::primitives::read_until_into(c, until, (uint8_t*)dstStr, cfg.N, consume_last, {}); 
             if (!r) return r;
             char *pEnd = dstStr + cfg.N;
+            //std::from_chars(std::begin(dstStr), std::end(dstStr), dstVar);
             dstVar = strtof(dstStr, &pEnd);
             if (dstStr == pEnd)
             {

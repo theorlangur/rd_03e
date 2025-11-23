@@ -118,3 +118,19 @@ int main(void)
 	//return (int)ptr.get();
 	return 0;
 }
+
+
+namespace std
+{
+	inline namespace __1{
+		[[noreturn]] void __libcpp_verbose_abort(char const* format, ...) noexcept {
+			{
+				va_list list;
+				va_start(list, format);
+				vprintk(format, list);
+				va_end(list);
+			}
+			k_sleep(K_FOREVER);
+		}
+	}
+}

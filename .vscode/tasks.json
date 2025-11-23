@@ -4,19 +4,31 @@
         {
             "label": "Build Ezurio LLVM",
             "type": "shell",
-            "command": "./llvm.sh cmake --build build_ezurio_llvm",
+            "command": "./e.sh cmake --build build_ezurio_llvm",
             "group": { "kind": "build" }
         },
         {
             "label": "West Build Ezurio LLVM",
             "type": "shell",
-            "command": "./llvm.sh ./build-ezurio-llvm.sh",
+            "command": "./e.sh ./build-ezurio-llvm.sh",
             "group": { "kind": "build" }
         },
         {
             "label": "West Build Ezurio LLVM Log",
             "type": "shell",
-            "command": "./llvm.sh ./build-ezurio-llvm-log.sh",
+            "command": "./e.sh ./build-ezurio-llvm-log.sh",
+            "group": { "kind": "build" }
+        },
+        {
+            "label": "Build Ezurio LLVM with libc++",
+            "type": "shell",
+            "command": "./lcxx.sh cmake --build build_ezurio_llvm",
+            "group": { "kind": "build" }
+        },
+        {
+            "label": "West Build Ezurio LLVM Log with libc++",
+            "type": "shell",
+            "command": "./lcxx.sh ./build-ezurio-llvm-log-lcxx.sh",
             "group": { "kind": "build" }
         },
         {
