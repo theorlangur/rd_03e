@@ -4,12 +4,15 @@
 
 #include <algorithm>
 #include <cstring>
-#include <cstdlib>
 #include "lib_dfr_c4001.h"
 #include "lib_misc_helpers.hpp"
 
 #define DBG_UART Channel::DbgNow _dbg_uart{this}; 
 #define DBG_ME DbgNow _dbg_me{this}; 
+
+#define TRY_CFG(f, location) \
+            if (auto r = f; !r) \
+                return result<ExpectedResult>::to(r.error(), location)
 
 namespace dfr
 {
@@ -38,12 +41,9 @@ namespace dfr
             using ExpectedResult = std::expected<uart::Channel::Ref, ::Err>;
             auto r = uart::primitives::read_until_into(c, until, (uint8_t*)dstStr, cfg.N, consume_last, {}); 
             if (!r) return r;
-            char *pEnd = dstStr + cfg.N;
-            //std::from_chars(std::begin(dstStr), std::end(dstStr), dstVar);
-            dstVar = strtof(dstStr, &pEnd);
-            if (dstStr == pEnd)
+            auto [ptr, ec] = std::from_chars(std::begin(dstStr), std::end(dstStr), dstVar);
+            if (ec != std::errc{})
             {
-                //nothing was read to convert
                 return ExpectedResult(std::unexpected(::Err{"failed to convert"}));
             }
             if (cfg.min != cfg.max)
@@ -70,11 +70,9 @@ namespace dfr
             using ExpectedResult = std::expected<uart::Channel::Ref, ::Err>;
             auto r = uart::primitives::read_until_into(c, until, (uint8_t*)dstStr, cfg.N, consume_last, {}); 
             if (!r) return r;
-            char *pEnd = dstStr + cfg.N;
-            dstVar = strtol(dstStr, &pEnd, 10);
-            if (dstStr == pEnd)
+            auto [ptr, ec] = std::from_chars(std::begin(dstStr), std::end(dstStr), dstVar);
+            if (ec != std::errc{})
             {
-                //nothing was read to convert
                 return ExpectedResult(std::unexpected(::Err{"failed to convert"}));
             }
             if (cfg.min != cfg.max)
@@ -104,19 +102,18 @@ namespace dfr
         return Configurator{*this};
     }
 
+
     C4001::ExpectedResult C4001::ReloadConfig()
     {
         auto cfg = GetConfigurator();
-        cfg.UpdateHWVersion();
-        cfg.UpdateSWVersion();
-        cfg.UpdateInhibit();
-        cfg.UpdateRange();
-        cfg.UpdateTrigRange();
-        cfg.UpdateSensitivity();
-        cfg.UpdateLatency();
-        auto r = cfg.End();
-        if (!r)
-            return result<ExpectedResult>::to(std::move(r.error()), "ReloadConfig");
+        TRY_CFG(cfg.UpdateHWVersion(), "ReloadConfig.HW");
+        TRY_CFG(cfg.UpdateSWVersion(), "ReloadConfig.SW");
+        TRY_CFG(cfg.UpdateInhibit(), "ReloadConfig.Inhibit");
+        TRY_CFG(cfg.UpdateRange(), "ReloadConfig.Range");
+        TRY_CFG(cfg.UpdateTrigRange(), "ReloadConfig.TrigRange");
+        TRY_CFG(cfg.UpdateSensitivity(), "ReloadConfig.Sensitivity");
+        TRY_CFG(cfg.UpdateLatency(), "ReloadConfig.Latency");
+        TRY_CFG(cfg.End(), "ReloadConfig.End");
         return std::ref(*this);
     }
 
