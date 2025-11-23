@@ -35,6 +35,35 @@ namespace dfr
     template<class T, size_t N>
     struct Sendable<T[N]>: Sendable<T(&)[N]>{};
 
+    template<class T, size_t N>
+    struct Sendable<T(&)[N]>: Sendable<const T(&)[N]>{};
+
+    template<>
+    struct Sendable<const char*>
+    {
+        static constexpr const bool value = true;
+        static auto send(uart::Channel &c, const char *a)
+        {
+            int l = strlen(a);
+            return c.Send((const uint8_t*)a, l);
+        }
+    };
+
+    template<>
+    struct Sendable<std::span<const char>>
+    {
+        static constexpr const bool value = true;
+        static auto send(uart::Channel &c, std::span<const char> const& s)
+        {
+            return c.Send((const uint8_t*)s.data(), s.size());
+        }
+    };
+
+    template<>
+    struct Sendable<std::span<char>>: Sendable<std::span<const char>>
+    {
+    };
+
     template<Invokable T>
     struct Sendable<T>
     {
@@ -224,7 +253,7 @@ namespace dfr
                 if (auto r = find_any_str({}, *this, "Done\r\n", "Error\r\n"); !r)
                     return std::unexpected(Err{r.error()});
                 else if (r->v != 0)//not 'Done', but 'Error'
-                    return std::unexpected(Err{{"SendCmd Error"}});
+                    return std::unexpected(Err{{"SendCmd Error resp"}});
                 return std::ref(*this);
             }
 
@@ -325,6 +354,9 @@ namespace dfr
             public:
                 using Ref = std::reference_wrapper<Configurator>;
                 using ExpectedResult = std::expected<Ref, Err>;
+
+                void StartDbg();
+                void StopDbg();
 
                 ExpectedResult End();
 

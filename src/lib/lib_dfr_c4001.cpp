@@ -6,6 +6,7 @@
 #include <cstring>
 #include "lib_dfr_c4001.h"
 #include "lib_misc_helpers.hpp"
+//#include <format>
 
 #define DBG_UART Channel::DbgNow _dbg_uart{this}; 
 #define DBG_ME DbgNow _dbg_me{this}; 
@@ -176,9 +177,15 @@ namespace dfr
     auto C4001::Configurator::SetSensitivity(uint8_t trig, uint8_t hold) -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        char buf[16]; 
-        tools::format_to(tools::BufferFormatter(buf), "{} {}", hold, trig);
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity), (const char*)buf);
+        //char buf[16]; 
+        //tools::format_to(tools::BufferFormatter(buf), "{} {}", hold, trig);
+        char buf1[8]; 
+        auto [ptr1, ec1] = std::to_chars(std::begin(buf1), std::end(buf1), hold);
+        if (ec1 != std::errc()) return ExpectedResult(std::unexpected(::Err{"Configurator.SetSensitivity fmt hold"}));
+        char buf2[8]; 
+        auto [ptr2, ec2] = std::to_chars(std::begin(buf2), std::end(buf2), trig);
+        if (ec2 != std::errc()) return ExpectedResult(std::unexpected(::Err{"Configurator.SetSensitivity fmt trig"}));
+        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity, std::span<char>{buf1, ptr1}, std::span<char>{buf2, ptr2}), "Configurator.SetSensitivity");
 
         return std::ref(*this);
     }
@@ -186,9 +193,9 @@ namespace dfr
     auto C4001::Configurator::SetSensitivityTrig(uint8_t val) -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        char buf[16]; 
-        tools::format_to(tools::BufferFormatter(buf), "255 {}", val);
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity), (const char*)buf);
+        char buf[8]; 
+        auto [ptr, ec] = std::to_chars(std::begin(buf), std::end(buf), val);
+        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity, "255", std::span<char>(buf, ptr)), "Configurator.SetSensitivityTrig");
 
         return std::ref(*this);
     }
@@ -217,10 +224,10 @@ namespace dfr
     auto C4001::Configurator::SetTrigRange(float v) -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        char buf[16]; 
-        tools::format_to(tools::BufferFormatter(buf), "{:.1}", v);
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetTrigRange), (const char*)buf);
-
+        char buf[8]; 
+        auto [ptr, ec] = std::to_chars(std::begin(buf), std::end(buf), v, std::chars_format::general, 1);
+        if (ec != std::errc()) return ExpectedResult(std::unexpected(::Err{"Configurator.SetTrigRange fmt"}));
+        TRY_UART_CFG(m_C.SendCmd(kCmdSetTrigRange, std::span<char>{buf, ptr}), "Configurator.SetTrigRange");
         return std::ref(*this);
     }
 
@@ -239,9 +246,13 @@ namespace dfr
     auto C4001::Configurator::SetRange(float from, float to) noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        char buf[16]; 
-        tools::format_to(tools::BufferFormatter(buf), "{:.1} {:.1}", from, to);
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetRange), (const char*)buf);
+        char buf1[8]; 
+        auto [ptr1, ec1] = std::to_chars(std::begin(buf1), std::end(buf1), from, std::chars_format::general, 1);
+        if (ec1 != std::errc()) return ExpectedResult(std::unexpected(::Err{"Configurator.SetRange fmt from"}));
+        char buf2[8]; 
+        auto [ptr2, ec2] = std::to_chars(std::begin(buf2), std::end(buf2), to, std::chars_format::general, 1);
+        if (ec2 != std::errc()) return ExpectedResult(std::unexpected(::Err{"Configurator.SetRange fmt to"}));
+        TRY_UART_CFG(m_C.SendCmd(kCmdSetRange, std::span<char>{buf1, ptr1}, std::span<char>{buf2, ptr2}), "Configurator.SetRange");
 
         return std::ref(*this);
     }
@@ -261,9 +272,10 @@ namespace dfr
     auto C4001::Configurator::SetInhibit(float v) noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        char buf[16]; 
-        tools::format_to(tools::BufferFormatter(buf), "{:.1}", v);
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetInhibit), (const char*)buf);
+        char buf1[8]; 
+        auto [ptr1, ec1] = std::to_chars(std::begin(buf1), std::end(buf1), v, std::chars_format::general, 1);
+        if (ec1 != std::errc()) return ExpectedResult(std::unexpected(::Err{"Configurator.SetInhibit fmt"}));
+        TRY_UART_CFG(m_C.SendCmd(kCmdSetInhibit, std::span<char>{buf1, ptr1}), "Configurator.SetInhibit");
         return std::ref(*this);
     }
 
@@ -291,6 +303,16 @@ namespace dfr
         return std::ref(*this);
     }
 
+    void C4001::Configurator::StartDbg()
+    {
+        m_C.m_Dbg = true;
+    }
+
+    void C4001::Configurator::StopDbg()
+    {
+        m_C.m_Dbg = false;
+    }
+
     auto C4001::Configurator::SaveConfig() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
@@ -315,7 +337,7 @@ namespace dfr
     auto C4001::Configurator::StopSensor()->ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        TRY_UART_CFG(m_C.SendCmdNoResp(kCmdSensorStop), "");
+        TRY_UART_CFG(m_C.SendCmd(kCmdSensorStop), "");
         return std::ref(*this);
     }
 

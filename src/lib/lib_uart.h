@@ -19,7 +19,7 @@ namespace uart
     public:
         using Ref = std::reference_wrapper<Channel>;
         using ExpectedResult = std::expected<Ref, Err>;
-        static constexpr const int kUARTAsyncBufSize = 4;
+        static constexpr const int kUARTAsyncBufSize = 8;
         static constexpr const int32_t kUARTRxTimeoutBits = 9 * 2;
 
         template<typename V>

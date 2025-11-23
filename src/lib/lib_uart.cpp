@@ -211,7 +211,8 @@ namespace uart
 	CALL_WITH_EXPECTED("Channel::Send", k_sem_take(&m_tx_sem, Z_TIMEOUT_MS(m_DefaultWait)));
 	if (m_Dbg)
 	{
-	    FMT_PRINTLN("Channel::Send: {}", std::span<const uint8_t>{pData, len});
+	    //FMT_PRINTLN("Channel::Send: {}", std::span<const uint8_t>{pData, len});
+	    FMT_PRINTLN("Channel::Send: {}", std::span<const char>{(const char*)pData, len});
 	}
 	m_pSendBuf = pData;
 	m_SendLen = len;
@@ -268,6 +269,7 @@ namespace uart
 	    int avail = m_InternalRecvBufLen - m_InternalRecvBufNextRead;
 	    int n = std::min(avail, (int)len);
 	    memcpy(pBuf, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
+	    if (m_Dbg) for(int i = 0; i < n; ++i) printk("%c", *(m_pInternalRecvBuf + m_InternalRecvBufNextRead + i));
 	    m_InternalRecvBufNextRead = (m_InternalRecvBufNextRead + n) % m_InternalRecvBufLen;
 	    read_bytes += n;
 	    if (read_bytes == len)
@@ -278,6 +280,7 @@ namespace uart
 	int left = len - read_bytes;
 	int n = std::min(avail, left);
 	memcpy(pBuf + read_bytes, m_pInternalRecvBuf + m_InternalRecvBufNextRead, n);
+	if (m_Dbg) for(int i = 0; i < n; ++i) printk("%c", *(m_pInternalRecvBuf + m_InternalRecvBufNextRead + i));
 	m_InternalRecvBufNextRead += n;
 	read_bytes += n;
 	return read_bytes;

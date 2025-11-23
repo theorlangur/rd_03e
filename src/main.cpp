@@ -70,8 +70,9 @@ int main(void)
 		FMT_PRINTLN("latency detect={:.1}; clear={:.1}", c4001.GetDetectLatency(), c4001.GetClearLatency());
 
 		auto cfg = c4001.GetConfigurator();
-		auto r = cfg.SetRange(0.6, 3)
-			.and_then([&](dfr::C4001::Configurator &c){ return c.SetTrigRange(3); })
+		auto r = 
+			cfg.SetRange(0.6, 4)
+			.and_then([&](dfr::C4001::Configurator &c){ return c.SetTrigRange(7.5); })
 			.and_then([&](dfr::C4001::Configurator &c){ return c.UpdateRange(); })
 			.and_then([&](dfr::C4001::Configurator &c){ return c.UpdateTrigRange(); });
 		if (!r)
