@@ -12,8 +12,10 @@ target_include_directories(app PRIVATE submodules/esp_generic_lib/include)
 target_sources(app PRIVATE src/main.cpp)
 add_subdirectory(src/lib)
 
-if(DEFINED ENV{USELIBCPP})
-    target_link_libraries(app PRIVATE c c++ c++abi)
+include(cmake/CustomLibcxx.cmake)
+
+if(COMMAND setup_custom_libcxx)
+    setup_custom_libcxx(app)
 else()
     target_link_libraries(app PRIVATE c stdc++ supc++)
     target_compile_options(app PRIVATE -fmacro-backtrace-limit=0)
