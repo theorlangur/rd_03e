@@ -68,6 +68,20 @@ int main(void)
 		FMT_PRINTLN("trig range={:.1}", c4001.GetTriggerDistance());
 		FMT_PRINTLN("sens hold={:.1}; sens trig={:.1}", c4001.GetSensitivityHold(), c4001.GetSensitivityTrig());
 		FMT_PRINTLN("latency detect={:.1}; clear={:.1}", c4001.GetDetectLatency(), c4001.GetClearLatency());
+
+		auto cfg = c4001.GetConfigurator();
+		auto r = cfg.SetRange(0.6, 3)
+			.and_then([&](dfr::C4001::Configurator &c){ return c.SetTrigRange(3); })
+			.and_then([&](dfr::C4001::Configurator &c){ return c.UpdateRange(); })
+			.and_then([&](dfr::C4001::Configurator &c){ return c.UpdateTrigRange(); });
+		if (!r)
+		{
+			FMT_PRINTLN("failed to change ranges: err={}", r.error());
+		}else
+		{
+			FMT_PRINTLN("new range={:.1}-{:.1}", c4001.GetRangeFrom(), c4001.GetRangeTo());
+			FMT_PRINTLN("new trig range={:.1}", c4001.GetTriggerDistance());
+		}
 	}
 
 	gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
