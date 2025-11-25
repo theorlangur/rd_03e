@@ -355,6 +355,8 @@ namespace dfr
                 using Ref = std::reference_wrapper<Configurator>;
                 using ExpectedResult = std::expected<Ref, Err>;
 
+                ~Configurator();
+
                 void StartDbg();
                 void StopDbg();
 
@@ -393,6 +395,7 @@ namespace dfr
                 C4001 &m_C;
                 RxBlock m_RxBlock;
                 ExpectedResult m_CtrResult;
+                bool m_Finished = false;
 
                 friend class C4001;
             };

@@ -144,6 +144,11 @@ namespace dfr
             m_CtrResult = result<ExpectedResult>::to(std::move(r),  "Configurator::Configurator");
     }
 
+    C4001::Configurator::~Configurator()
+    {
+        End().value_or(*this);
+    }
+
     auto C4001::Configurator::UpdateLatency() -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
@@ -329,6 +334,9 @@ namespace dfr
 
     auto C4001::Configurator::End() -> ExpectedResult
     {
+        if (m_Finished)
+            return std::unexpected(Err{"Configurator::End unexpected finish"});
+        m_Finished = true;
         if (!m_CtrResult) return m_CtrResult;
         TRY_UART_CFG(StartSensor(), "Configurator::End");
         return std::ref(*this);
