@@ -12,6 +12,9 @@ target_include_directories(app PRIVATE submodules/esp_generic_lib/include)
 target_sources(app PRIVATE src/main.cpp)
 add_subdirectory(src/lib)
 
+zephyr_include_directories(submodules/nrf_zb_cpp/include)
+zephyr_include_directories(submodules/nrf_general/include)
+
 include(cmake/CustomLibcxx.cmake)
 
 if(COMMAND setup_custom_libcxx)
