@@ -217,7 +217,7 @@ namespace dfr
                         first = false;
                     else
                         _r = Sendable<decltype(" ")>::send(*this, " ");
-                    _r = std::move(Sendable<SendArg>::send(*this, std::forward<SendArg>(a)));
+                    _r = std::move(Sendable<std::remove_cvref_t<SendArg>>::send(*this, std::forward<SendArg>(a)));
                 };
                 (send_one(std::forward<ToSend>(args)),...);
                 TRY_UART_COMM(_r, "SendArgs");
@@ -230,7 +230,7 @@ namespace dfr
             template<class... ToSend> 
             ExpectedResult SendCmd(ToSend&&...args) 
             { 
-                static_assert((Sendable<ToSend>::value && ... && true), "All arguments must be sendable");
+                static_assert((Sendable<std::remove_cvref_t<ToSend>>::value && ... && true), "All arguments must be sendable");
                 Channel::ExpectedResult _r(std::ref(*this));
                 bool first = true;
                 auto send_one = [&]<class SendArg>(SendArg &&a)
@@ -241,7 +241,7 @@ namespace dfr
                         first = false;
                     else
                         _r = Sendable<decltype(" ")>::send(*this, " ");
-                    _r = std::move(Sendable<SendArg>::send(*this, std::forward<SendArg>(a)));
+                    _r = std::move(Sendable<std::remove_cvref_t<SendArg>>::send(*this, std::forward<SendArg>(a)));
                 };
                 (send_one(std::forward<ToSend>(args)),...);
                 TRY_UART_COMM(_r, "SendArgs");
@@ -260,7 +260,7 @@ namespace dfr
             template<class... ToSend, class... ToRecv> 
             ExpectedResult SendCmdWithParams(std::tuple<ToSend...> tosend, std::tuple<ToRecv...> torecv, bool dbg = false) 
             { 
-                static_assert((Sendable<ToSend>::value && ... && true), "All arguments must be sendable");
+                static_assert((Sendable<std::remove_cvref_t<ToSend>>::value && ... && true), "All arguments must be sendable");
                 Channel::ExpectedResult _r(std::ref(*this));
                 bool first = true;
                 auto send_one = [&]<class SendArg>(SendArg &&a)
@@ -399,9 +399,6 @@ namespace dfr
 
             Configurator GetConfigurator();
         private:
-#define TRY_UART_CFG(f, location) \
-            if (auto r = f; !r) \
-                return result<Configurator::ExpectedResult>::to(std::move(r), location)
     };
 }
 
