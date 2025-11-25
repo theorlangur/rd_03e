@@ -163,12 +163,10 @@ namespace uart
 			    k_sem_give(&pC->m_rx_sem);
 			}else
 			{
-			    //printk("rx rdy (buf): nothing to write\r\n");
 			}
 		    }
 		    else
 		    {
-			//printk("rx rdy (no buf): %d\r\n", evt->data.rx.len);
 		    }
 		}
 		break;
@@ -211,7 +209,6 @@ namespace uart
 	CALL_WITH_EXPECTED("Channel::Send", k_sem_take(&m_tx_sem, Z_TIMEOUT_MS(m_DefaultWait)));
 	if (m_Dbg)
 	{
-	    //FMT_PRINTLN("Channel::Send: {}", std::span<const uint8_t>{pData, len});
 	    FMT_PRINTLN("Channel::Send: {}", std::span<const char>{(const char*)pData, len});
 	}
 	m_pSendBuf = pData;
@@ -222,7 +219,8 @@ namespace uart
 
     void Channel::AllowReadUpTo(uint8_t *pData, size_t len)
     {
-	FMT_PRINTLN("Channel::AllowReadUpTo: {}", len);
+	if (m_Dbg)
+	    FMT_PRINTLN("Channel::AllowReadUpTo: {}", len);
 	m_pInternalRecvBuf = pData;
         m_InternalRecvBufLen = len;
         m_InternalRecvBufNextWrite = 0;
@@ -241,7 +239,6 @@ namespace uart
 	    FMT_PRINTLN("Channel::StopReading: could not disable RX: {}", r);
 	}else
 	{
-	    //FMT_PRINTLN("Channel::StopReading: written {}; read: {};", m_InternalRecvBufNextWrite, m_InternalRecvBufNextRead);
 	    if (m_pInternalRecvBuf && m_InternalRecvBufNextWrite)
 	    {
 		if (dbg)
@@ -250,7 +247,8 @@ namespace uart
 		}
 		else if (m_InternalRecvBufNextWrite != m_InternalRecvBufNextRead)
 		{
-		    FMT_PRINTLN("Channel::StopReading: unread data in buf: {}", std::string_view{(const char*)m_pInternalRecvBuf + m_InternalRecvBufNextRead, (size_t)(m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead)});
+		    if (m_Dbg)
+			FMT_PRINTLN("Channel::StopReading: unread data in buf: {}", std::string_view{(const char*)m_pInternalRecvBuf + m_InternalRecvBufNextRead, (size_t)(m_InternalRecvBufNextWrite - m_InternalRecvBufNextRead)});
 		}
 	    }
 	}

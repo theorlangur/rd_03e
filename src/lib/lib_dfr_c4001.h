@@ -286,17 +286,20 @@ namespace dfr
                     return uart::primitives::read_any(*this, std::get<idx>(torecv)...);
                 };
 
-                printk("Receiving params\r\n");
+                if (m_Dbg)
+                    printk("Receiving params\r\n");
                 TRY_UART_COMM(recv_tuple(std::make_index_sequence<sizeof...(ToRecv)>()), "SendCmdWithParams");
 
-                printk("Received. Receiving Done or Error\r\n");
+                if (m_Dbg)
+                    printk("Received. Receiving Done or Error\r\n");
                 //wait for a final 'Done'
                 using namespace uart::primitives;
                 if (auto r = find_any_str({}, *this, "Done\r\n", "Error\r\n"); !r)
                     return std::unexpected(Err{r.error()});
                 else if (r->v != 0)//not 'Done', but 'Error'
                     return std::unexpected(Err{{"SendCmd Error"}});
-                printk("Done\r\n");
+                if (m_Dbg)
+                    printk("Done\r\n");
                 return std::ref(*this);
             }
 
