@@ -19,6 +19,7 @@
 #include <nrfzbcpp/zb_main.hpp>
 #include <nrfzbcpp/zb_std_cluster_desc.hpp>
 #include <nrfzbcpp/zb_status_cluster_desc.hpp>
+#include <nrfzbcpp/zb_occupancy_sensing_cluster_desc.hpp>
 
 /**********************************************************************/
 /* Zigbee Declarations and Definitions                                */
@@ -45,12 +46,24 @@ constexpr uint16_t kDEV_ID = 0xBAAD;
 struct device_ctx_t{
     zb::zb_zcl_basic_names_t basic_attr;
     zb::zb_zcl_status_t status_attr;
+    zb::zb_zcl_occupancy_ultrasonic_t occupancy;
 };
 
 //attribute shortcuts for template arguments
+
+/**********************************************************************/
+/* Status attribute shortcuts                                         */
+/**********************************************************************/
 constexpr auto kAttrStatus1 = &zb::zb_zcl_status_t::status1;
 constexpr auto kAttrStatus2 = &zb::zb_zcl_status_t::status2;
 constexpr auto kAttrStatus3 = &zb::zb_zcl_status_t::status3;
+
+/**********************************************************************/
+/* Occupancy attribute shortcuts                                      */
+/**********************************************************************/
+constexpr auto kAttrOccupancy = &zb::zb_zcl_occupancy_ultrasonic_t::occupancy;
+constexpr auto kAttrDetectToClearDelay = &zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicOccupiedToUnoccupiedDelay;
+constexpr auto kAttrClearToDetectDelay = &zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicUnoccupiedToOccupiedDelay;
 
 /* Zigbee device application context storage. */
 static constinit device_ctx_t dev_ctx{
@@ -68,6 +81,7 @@ constinit static auto zb_ctx = zb::make_device(
 	zb::make_ep_args<{.ep=kMMW_EP, .dev_id=kDEV_ID, .dev_ver=1}>(
 	    dev_ctx.basic_attr
 	    , dev_ctx.status_attr
+	    , dev_ctx.occupancy
 	    )
 	);
 
