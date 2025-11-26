@@ -47,6 +47,7 @@ struct device_ctx_t{
     zb::zb_zcl_basic_names_t basic_attr;
     zb::zb_zcl_status_t status_attr;
     zb::zb_zcl_occupancy_ultrasonic_t occupancy;
+    zb::zb_zcl_on_off_attrs_client_t on_off_client;
 };
 
 //attribute shortcuts for template arguments
@@ -65,6 +66,16 @@ constexpr auto kAttrOccupancy = &zb::zb_zcl_occupancy_ultrasonic_t::occupancy;
 constexpr auto kAttrDetectToClearDelay = &zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicOccupiedToUnoccupiedDelay;
 constexpr auto kAttrClearToDetectDelay = &zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicUnoccupiedToOccupiedDelay;
 
+constexpr auto kCmdOn = &zb::zb_zcl_on_off_attrs_client_t::on;
+constexpr auto kCmdOff = &zb::zb_zcl_on_off_attrs_client_t::off;
+
+//forward declare
+/**********************************************************************/
+/* Support for On/Off cluster client commands                         */
+/**********************************************************************/
+template<> struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
+using custom_accel_handler_t = zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
+
 /* Zigbee device application context storage. */
 static constinit device_ctx_t dev_ctx{
     .basic_attr = {
@@ -82,11 +93,24 @@ constinit static auto zb_ctx = zb::make_device(
 	    dev_ctx.basic_attr
 	    , dev_ctx.status_attr
 	    , dev_ctx.occupancy
+	    , dev_ctx.on_off_client
 	    )
 	);
 
 //a shortcut for a convenient access
 constinit static auto &zb_ep = zb_ctx.ep<kMMW_EP>();
+
+/**********************************************************************/
+/* Support for On/Off cluster client commands                         */
+/**********************************************************************/
+//magic handwaving to avoid otherwise necessary command handling boilerplate
+//uses CRTP so that cluster_custom_handler_base_t would know the end type it needs to work with
+template<> 
+struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>: cluster_custom_handler_base_t<custom_accel_handler_t>
+{
+    //the rest will be done by cluster_custom_handler_base_t
+    static auto& get_device() { return zb_ctx; }
+};
 
 /**********************************************************************/
 /* Device defines                                                     */
