@@ -20,6 +20,7 @@
 #include <nrfzbcpp/zb_std_cluster_desc.hpp>
 #include <nrfzbcpp/zb_status_cluster_desc.hpp>
 #include <nrfzbcpp/zb_occupancy_sensing_cluster_desc.hpp>
+#include "zb/zb_c4001_cluster_desc.hpp"
 
 /**********************************************************************/
 /* Zigbee Declarations and Definitions                                */
@@ -48,6 +49,7 @@ struct device_ctx_t{
     zb::zb_zcl_status_t status_attr;
     zb::zb_zcl_occupancy_ultrasonic_t occupancy;
     zb::zb_zcl_on_off_attrs_client_t on_off_client;
+    zb::zb_zcl_c4001_t c4001;
 };
 
 //attribute shortcuts for template arguments
@@ -94,6 +96,7 @@ constinit static auto zb_ctx = zb::make_device(
 	    , dev_ctx.status_attr
 	    , dev_ctx.occupancy
 	    , dev_ctx.on_off_client
+	    , dev_ctx.c4001
 	    )
 	);
 
