@@ -1,7 +1,7 @@
 #ifndef LIB_DFR_C4001_H_
 #define LIB_DFR_C4001_H_
 
-#include "lib_misc_helpers.hpp"
+#include <zephyr/drivers/uart.h>
 #include "lib_uart.h"
 #include <span>
 #include "lib_uart_primitives.h"

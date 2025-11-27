@@ -9,9 +9,8 @@
 
 #include <zephyr/kernel.h>
 #include <zephyr/drivers/gpio.h>
-#include <zephyr/drivers/uart.h>
 #include <zephyr/settings/settings.h>
-#include "lib/lib_dfr_c4001.h"
+#include "c4001_task.hpp"
 
 /**********************************************************************/
 /* Zigbee                                                             */
@@ -126,10 +125,12 @@ struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>: 
  * See the sample documentation for information on how to fix this.
  */
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-constinit const struct device *rd_uart = DEVICE_DT_GET(DT_NODELABEL(uart30));
+//constinit const struct device *rd_uart = DEVICE_DT_GET(DT_NODELABEL(uart30));
 
 ///* Get the node from the alias */
 #define SENSOR_NODE DT_ALIAS(presence)
+
+constinit static dfr::C4001 *pC4001 = nullptr;
 
 /* Get the GPIO spec directly from the node */
 /* Note: We look for the property "gpios" inside the node */
@@ -141,8 +142,9 @@ void presence_triggered(const struct device *port,
 					struct gpio_callback *cb,
 					gpio_port_pins_t pins)
 {
-	int val = gpio_pin_get_dt(&presence);
-	gpio_pin_set_dt(&led, val);
+    int val = gpio_pin_get_dt(&presence);
+    gpio_pin_set_dt(&led, val);
+    //post to zigbee and shoot commands
 }
 
 void on_dev_cb_error(int err)
@@ -150,83 +152,107 @@ void on_dev_cb_error(int err)
     printk("on_dev_cb_error: %d\r\n", err);
 }
 
-void test_func();
+void on_c4001_error(c4001::err_t e)
+{
+    //post to zigbee thread
+}
+
+int configure_c4001_out_pin();
+
+void on_zigbee_start()
+{
+    printk("on_zigbee_start\r\n");
+    g_ZigbeeReady = true;
+    //TODO: stuff...
+}
+
+/**@brief Zigbee stack event handler.
+ *
+ * @param[in]   bufid   Reference to the Zigbee stack buffer
+ *                      used to pass signal.
+ */
+void zboss_signal_handler(zb_bufid_t bufid)
+{
+        zb_zdo_app_signal_hdr_t *pHdr;
+        auto signalId = zb_get_app_signal(bufid, &pHdr);
+
+	auto ret = zb::tpl_signal_handler<zb::sig_handlers_t{
+	.on_leave = +[]{ 
+	    k_sleep(K_MSEC(2100));
+	    sys_reboot(SYS_REBOOT_COLD);
+	},
+	    //.on_error = []{ led::show_pattern(led::kPATTERN_3_BLIPS_NORMED, 1000); },
+	    .on_dev_reboot = on_zigbee_start,
+	    .on_steering = on_zigbee_start,
+	   }>(bufid);
+    const uint32_t LOCAL_ERR_CODE = (uint32_t) (-ret);	
+    if (LOCAL_ERR_CODE != RET_OK) {				
+	zb_osif_abort();				
+    }							
+}
 
 int main(void)
 {
     int err = settings_subsys_init();
     err = settings_load();
 
+    pC4001 = c4001::setup(&on_c4001_error);
+    if (pC4001)
+    {
+	dev_ctx.c4001.range_min = pC4001->GetRangeFrom();
+	dev_ctx.c4001.range_max = pC4001->GetRangeTo();
+	dev_ctx.c4001.range_trig = pC4001->GetTriggerDistance();
+	dev_ctx.c4001.inhibit_duration = pC4001->GetInhibitDuration();
+	dev_ctx.c4001.sensitivity_detect = pC4001->GetSensitivityTrig();
+	dev_ctx.c4001.sensitivity_hold = pC4001->GetSensitivityHold();
+	dev_ctx.c4001.sw_ver = pC4001->GetSWVer().m_Version;
+	dev_ctx.c4001.hw_ver = pC4001->GetHWVer().m_Version;
+    }
+
     /* Register callback for handling ZCL commands. */
     auto dev_cb = zb::tpl_device_cb<
 		zb::dev_cb_handlers_desc{ .error_handler = on_dev_cb_error }
+	//to_settings_handler<on_wake_sleep_settings_changed>(ZbSettingsEntries::wake_sleep_threshold)
     >;
 
     ZB_ZCL_REGISTER_DEVICE_CB(dev_cb);
 
-    /* Register dimmer switch device context (endpoints). */
+    /* Register device context (endpoints). */
     ZB_AF_REGISTER_DEVICE_CTX(zb_ctx);
 
     zigbee_enable();
-    printk("Main: sleep forever\r\n");
-	test_func();
-    while (1) {
-		k_sleep(K_FOREVER);
+    if (int err = configure_c4001_out_pin(); err != 0)
+    {
+	printk("Failed to configure c4001 out pin\r\n");
     }
 
-	return 0;
+    printk("Main: sleep forever\r\n");
+    //test_func();
+    while (1) {
+	k_sleep(K_FOREVER);
+    }
+
+    return 0;
 }
 
-void test_func()
+int configure_c4001_out_pin()
 {
-	FMT_PRINTLN("main. start");
-	k_msleep(1000);
+    gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
+    int err = gpio_pin_configure_dt(&presence, GPIO_INPUT);
+    if (err != 0)
+    {
+	printk("gpio_pin_configure_dt: %d\r\n", err);
+	return err;
+    }
+    gpio_pin_set_dt(&led, 0);
 
-	dfr::C4001 c4001(rd_uart);
-	auto r = c4001.Init();
-	if (!r)
-	{
-		FMT_PRINTLN("init err={}", r.error());
-	}else
-	{
-		printk("getting version\r\n");
-		FMT_PRINTLN("hwver={}", (const char*)c4001.GetHWVer().m_Version);
-		FMT_PRINTLN("swver={}", (const char*)c4001.GetSWVer().m_Version);
-		FMT_PRINTLN("inhibit={:.2}", c4001.GetInhibitDuration());
-		FMT_PRINTLN("range={:.1}-{:.1}", c4001.GetRangeFrom(), c4001.GetRangeTo());
-		FMT_PRINTLN("trig range={:.1}", c4001.GetTriggerDistance());
-		FMT_PRINTLN("sens hold={:.1}; sens trig={:.1}", c4001.GetSensitivityHold(), c4001.GetSensitivityTrig());
-		FMT_PRINTLN("latency detect={:.1}; clear={:.1}", c4001.GetDetectLatency(), c4001.GetClearLatency());
-
-		auto cfg = c4001.GetConfigurator();
-		auto r = 
-			cfg.SetRange(0.6, 4)
-			.and_then([&](dfr::C4001::Configurator &c){ return c.SetTrigRange(7.5); })
-			.and_then([&](dfr::C4001::Configurator &c){ return c.UpdateRange(); })
-			.and_then([&](dfr::C4001::Configurator &c){ return c.UpdateTrigRange(); });
-		if (!r)
-		{
-			FMT_PRINTLN("failed to change ranges: err={}", r.error());
-		}else
-		{
-			FMT_PRINTLN("new range={:.1}-{:.1}", c4001.GetRangeFrom(), c4001.GetRangeTo());
-			FMT_PRINTLN("new trig range={:.1}", c4001.GetTriggerDistance());
-		}
-	}
-
-	gpio_pin_configure_dt(&led, GPIO_OUTPUT_ACTIVE);
-	int err = gpio_pin_configure_dt(&presence, GPIO_INPUT);
-	if (err != 0)
-		printk("gpio_pin_configure_dt: %d\r\n", err);
-	gpio_pin_set_dt(&led, 0);
-
-	err = gpio_pin_interrupt_configure_dt(&presence, GPIO_INT_EDGE_BOTH);
-	if (err != 0)
-		printk("gpio_pin_interrupt_configure_dt: %d\r\n", err);
-	gpio_init_callback(&g_cb, presence_triggered, BIT(presence.pin));
-	gpio_add_callback_dt(&presence, &g_cb);
-
-	//printk("sleeping...\r\n");
-	//while(true)
-	//	k_msleep(100000);
+    err = gpio_pin_interrupt_configure_dt(&presence, GPIO_INT_EDGE_BOTH);
+    if (err != 0)
+    {
+	printk("gpio_pin_interrupt_configure_dt: %d\r\n", err);
+	return err;
+    }
+    gpio_init_callback(&g_cb, presence_triggered, BIT(presence.pin));
+    return gpio_add_callback_dt(&presence, &g_cb);
 }
+
