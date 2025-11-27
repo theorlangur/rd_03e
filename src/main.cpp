@@ -136,6 +136,8 @@ constinit static dfr::C4001 *pC4001 = nullptr;
 /* Note: We look for the property "gpios" inside the node */
 static const struct gpio_dt_spec presence = GPIO_DT_SPEC_GET(SENSOR_NODE, gpios);
 
+void send_on_off(uint8_t val);
+
 gpio_callback g_cb;
 
 void presence_triggered(const struct device *port,
@@ -144,17 +146,45 @@ void presence_triggered(const struct device *port,
 {
     int val = gpio_pin_get_dt(&presence);
     gpio_pin_set_dt(&led, val);
-    //post to zigbee and shoot commands
+
+    if (g_ZigbeeReady) //post to zigbee and shoot commands
+	zb_schedule_app_callback(&send_on_off, val);
 }
+
+void send_on_off(uint8_t val)
+{
+    zb_ep.attr<kAttrOccupancy>() = val == 1;
+    if (val == 1)
+	zb_ep.send_cmd<kCmdOn>();
+    else
+	zb_ep.send_cmd<kCmdOff>();
+}
+
 
 void on_dev_cb_error(int err)
 {
     printk("on_dev_cb_error: %d\r\n", err);
 }
 
+void zb_c4001_error(uint8_t e)
+{
+    switch(c4001::err_t(e))
+    {
+	case c4001::err_t::Range:
+	{
+	    //set what C4001 last reported
+	}
+	break;
+	default:
+	break;
+    }
+    zb_ep.attr<kAttrStatus1>() = e;
+}
+
 void on_c4001_error(c4001::err_t e)
 {
-    //post to zigbee thread
+    if (g_ZigbeeReady)
+	zb_schedule_app_callback(&zb_c4001_error, (uint8_t)e);
 }
 
 int configure_c4001_out_pin();
@@ -191,6 +221,11 @@ void zboss_signal_handler(zb_bufid_t bufid)
     }							
 }
 
+void on_detect_to_clear_delay_changed(float v)
+{
+    c4001::set_clear_delay(v);
+}
+
 int main(void)
 {
     int err = settings_subsys_init();
@@ -210,9 +245,13 @@ int main(void)
     }
 
     /* Register callback for handling ZCL commands. */
+    //zb_ep.attribute_desc<>();
     auto dev_cb = zb::tpl_device_cb<
-		zb::dev_cb_handlers_desc{ .error_handler = on_dev_cb_error }
-	//to_settings_handler<on_wake_sleep_settings_changed>(ZbSettingsEntries::wake_sleep_threshold)
+	zb::dev_cb_handlers_desc{ .error_handler = on_dev_cb_error }
+	, zb::set_attr_val_gen_desc_t{
+	    zb_ep.attribute_desc<kAttrDetectToClearDelay>()
+	    ,zb::to_handler_v<on_detect_to_clear_delay_changed>
+	  }
     >;
 
     ZB_ZCL_REGISTER_DEVICE_CB(dev_cb);
