@@ -11,7 +11,9 @@ namespace c4001
         RangeTrig,
         Delay,
         Sensitivity,
-        InhibitDuration
+        InhibitDuration,
+        SaveConfig,
+        ResetConfig
     };
     using err_callback_t = void(*)(err_t);
     dfr::C4001* setup(err_callback_t err);
@@ -25,6 +27,8 @@ namespace c4001
     void set_hold_sensitivity(uint8_t s);
     void set_sensitivity(uint8_t detect, uint8_t hold);
     void set_inhibit_duration(float dur);
+    void save_config();
+    void reset_config();
 }
 
 #endif
