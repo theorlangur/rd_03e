@@ -51,8 +51,9 @@ namespace c4001
     };
     struct save_cfg_t{};
     struct reset_cfg_t{};
+    struct restart_cfg_t{};
 
-    using QueueItem = std::variant<range_t, range_trig_t, delay_t, sensitivity_t, inhibit_duration_t, save_cfg_t, reset_cfg_t>;
+    using QueueItem = std::variant<range_t, range_trig_t, delay_t, sensitivity_t, inhibit_duration_t, save_cfg_t, reset_cfg_t, restart_cfg_t>;
 
     using C4001Q = msgq::Queue<QueueItem,4>;
     K_MSGQ_DEFINE_TYPED(C4001Q, c4001q);
@@ -131,6 +132,11 @@ K_THREAD_DEFINE(c4001_thread, C4001_THREAD_STACK_SIZE,
 	c4001q << reset_cfg_t{};
     }
 
+    void restart()
+    {
+	c4001q << restart_cfg_t{};
+    }
+
     void c4001_thread_entry(void *, void *, void *)
     {
 	QueueItem q;
@@ -166,6 +172,10 @@ K_THREAD_DEFINE(c4001_thread, C4001_THREAD_STACK_SIZE,
 		    ,[](reset_cfg_t const& v){  
 			if (auto r = c4001.GetConfigurator().ResetConfig(); !r && g_err)
 			    g_err(err_t::ResetConfig);
+		    }
+		    ,[](restart_cfg_t const& v){  
+			if (auto r = c4001.GetConfigurator().Restart(); !r && g_err)
+			    g_err(err_t::Restart);
 		    }
 		},
 		q
