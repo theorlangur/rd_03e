@@ -89,6 +89,12 @@ namespace dfr
         } 
     };
 
+    template<size_t N>
+    inline std::span<const char> to_str_span(const uint8_t (&arr)[N])
+    {
+        return {(const char*)std::begin(arr), (const char*)std::end(arr) - 1};
+    }
+
     C4001::C4001(const struct device *pUART):
         uart::Channel(pUART)
     {
@@ -156,7 +162,7 @@ namespace dfr
         read_float_from_str_t<{.min = 0, .max = 100}> readDetect{m_C.m_DetectLatency, ' '};
         read_float_from_str_t<{.min = 0, .max = 1500}> readClear{m_C.m_ClearLatency, '\r'};
         TRY_UART_CFG(m_C.SendCmdWithParamsStd(
-                        to_send(kCmdGetLatency), 
+                        to_send(to_str_span(kCmdGetLatency)), 
                         to_recv(readDetect, readClear)), "");
         return std::ref(*this);
     }
@@ -168,7 +174,7 @@ namespace dfr
         auto arg = tools::format_to_span(buf, "{:.1} {:.1}", detect, clear);
         if (arg.empty())
             return std::unexpected(Err{"Configurator::SetLatency fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetLatency, arg), "Configurator::SetLatency");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetLatency), arg), "Configurator::SetLatency");
 
         return std::ref(*this);
     }
@@ -180,7 +186,7 @@ namespace dfr
         read_uint8_from_str_t<{.min = 0, .max = 9}> readHold{m_C.m_SensitivityHold, ' '};
         read_uint8_from_str_t<{.min = 0, .max = 9}> readTrig{m_C.m_SensitivityTrigger, '\r'};
         TRY_UART_CFG(m_C.SendCmdWithParamsStd(
-                        to_send(kCmdGetSensitivity), 
+                        to_send(to_str_span(kCmdGetSensitivity)), 
                         to_recv(readHold, readTrig)), "");
         return std::ref(*this);
     }
@@ -191,7 +197,7 @@ namespace dfr
         char buf[16]; 
         auto arg = tools::format_to_span(buf, "{} {}", hold, trig);
         if (arg.empty()) return std::unexpected(Err{"Configurator::SetSensitivity fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity, arg), "Configurator.SetSensitivity");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetSensitivity), arg), "Configurator.SetSensitivity");
 
         return std::ref(*this);
     }
@@ -202,7 +208,7 @@ namespace dfr
         char buf[16]; 
         auto arg = tools::format_to_span(buf, "255 {}", val);
         if (arg.empty()) return std::unexpected(Err{"Configurator::SetSensitivityTrig fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity, arg), "Configurator.SetSensitivityTrig");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetSensitivity), arg), "Configurator.SetSensitivityTrig");
 
         return std::ref(*this);
     }
@@ -213,7 +219,7 @@ namespace dfr
         char buf[16]; 
         auto arg = tools::format_to_span(buf, "{} 255", val);
         if (arg.empty()) return std::unexpected(Err{"Configurator::SetSensitivityHold fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetSensitivity, arg), "Configurator::SetSensitivityHold");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetSensitivity), arg), "Configurator::SetSensitivityHold");
 
         return std::ref(*this);
     }
@@ -224,7 +230,7 @@ namespace dfr
         using namespace uart::primitives;
         read_float_from_str_t<{.min = 0.6, .max = 25}> readTrig{m_C.m_TrigRange, '\r'};
         TRY_UART_CFG(m_C.SendCmdWithParamsStd(
-                        to_send(kCmdGetTrigRange), 
+                        to_send(to_str_span(kCmdGetTrigRange)), 
                         to_recv(readTrig)), "");
         return std::ref(*this);
     }
@@ -235,7 +241,7 @@ namespace dfr
         char buf[8]; 
         auto arg = tools::format_to_span(buf, "{:.1}", v);
         if (arg.empty()) return std::unexpected(Err{"Configurator::SetTrigRange fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetTrigRange, arg), "Configurator.SetTrigRange");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetTrigRange), arg), "Configurator.SetTrigRange");
         return std::ref(*this);
     }
 
@@ -246,7 +252,7 @@ namespace dfr
         read_float_from_str_t<{.min = 0.6, .max = 25}> readFrom{m_C.m_MinRange, ' '};
         read_float_from_str_t<{.min = 0.6, .max = 25}> readTo{m_C.m_MaxRange, '\r'};
         TRY_UART_CFG(m_C.SendCmdWithParamsStd(
-                        to_send(kCmdGetRange), 
+                        to_send(to_str_span(kCmdGetRange)), 
                         to_recv(readFrom, readTo)), "");
         return std::ref(*this);
     }
@@ -257,7 +263,7 @@ namespace dfr
         char buf[16];
         auto arg = tools::format_to_span(buf, "{:.2} {:.2}", from, to);
         if (arg.empty()) return std::unexpected(Err{"Configurator::SetRange fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetRange, arg), "Configurator.SetRange");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetRange), arg), "Configurator.SetRange");
 
         return std::ref(*this);
     }
@@ -268,7 +274,7 @@ namespace dfr
         using namespace uart::primitives;
         read_float_from_str_t<{.min = 0, .max = 255}> readInhibit{m_C.m_Inhibit, '\r'};
         TRY_UART_CFG(m_C.SendCmdWithParamsStd(
-                        to_send(kCmdGetInhibit), 
+                        to_send(to_str_span(kCmdGetInhibit)), 
                         to_recv(readInhibit)), "");
 
         return std::ref(*this);
@@ -280,14 +286,14 @@ namespace dfr
         char buf[8]; 
         auto arg = tools::format_to_span(buf, "{:.1}", v);
         if (arg.empty()) return std::unexpected(Err{"Configurator::SetInhibit fmt", 0});
-        TRY_UART_CFG(m_C.SendCmd(kCmdSetInhibit, arg), "Configurator.SetInhibit");
+        TRY_UART_CFG(m_C.SendCmd(to_str_span(kCmdSetInhibit), arg), "Configurator.SetInhibit");
         return std::ref(*this);
     }
 
     auto C4001::Configurator::SwitchToPresenceMode() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        TRY_UART_CFG(m_C.SendCmdNoResp(kCmdSetRunApp, kCmdAppModePresence), "");
+        TRY_UART_CFG(m_C.SendCmdNoResp(to_str_span(kCmdSetRunApp), kCmdAppModePresence), "");
         k_msleep(500);
         return std::ref(*this);
     }
@@ -295,7 +301,7 @@ namespace dfr
     auto C4001::Configurator::SwitchToSpeedDistanceMode() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        TRY_UART_CFG(m_C.SendCmdNoResp(kCmdSetRunApp, kCmdAppModeSpeedDistance), "");
+        TRY_UART_CFG(m_C.SendCmdNoResp(to_str_span(kCmdSetRunApp), kCmdAppModeSpeedDistance), "");
         k_msleep(500);
         return std::ref(*this);
     }
@@ -303,7 +309,7 @@ namespace dfr
     auto C4001::Configurator::Restart() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;
-        TRY_UART_CFG(m_C.SendCmdNoResp(kCmdRestart, kCmdRestartParamNormal), "");
+        TRY_UART_CFG(m_C.SendCmdNoResp(to_str_span(kCmdRestart), kCmdRestartParamNormal), "");
         k_msleep(500);
         return std::ref(*this);
     }

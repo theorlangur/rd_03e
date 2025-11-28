@@ -271,7 +271,7 @@ namespace dfr
                         first = false;
                     else
                         _r = Sendable<decltype(" ")>::send(*this, " ");
-                    _r = std::move(Sendable<SendArg>::send(*this, std::forward<SendArg>(a)));
+                    _r = std::move(Sendable<std::remove_cvref_t<SendArg>>::send(*this, std::forward<SendArg>(a)));
                 };
                 auto send_tuple = [&]<size_t... idx>(std::index_sequence<idx...>)
                 {
@@ -311,9 +311,14 @@ namespace dfr
                 constexpr auto isConstUint8 = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, const uint8_t*>;
                 constexpr auto isChar = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, char*>;
                 constexpr auto isConstChar = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, const char*>;
-                static_assert(isUint8 || isConstUint8 || isChar || isConstChar);
+                constexpr auto isConstCharSpan = std::same_as<std::remove_cvref_t<decltype(std::get<0>(tosend))>, std::span<const char>>;
+                static_assert(isUint8 || isConstUint8 || isChar || isConstChar || isConstCharSpan);
 
-                const char *pCmd = (const char*)std::get<0>(tosend);
+                const char *pCmd;
+                if constexpr (isConstCharSpan)
+                    pCmd = std::get<0>(tosend).data();
+                else
+                    pCmd = (const char*)std::get<0>(tosend);
                 using namespace uart::primitives;
                 return SendCmdWithParams(
                         std::move(tosend),
