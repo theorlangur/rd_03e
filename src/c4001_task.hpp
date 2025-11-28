@@ -1,9 +1,21 @@
 #ifndef C4001_TASK_HPP_
 #define C4001_TASK_HPP_
 #include "lib/lib_dfr_c4001.h"
+#include <utility>
 
 namespace c4001
 {
+    enum class cfg_id_t: uint8_t
+    {
+        Range           = 1 << 0,
+        RangeTrig       = 1 << 1,
+        Delay           = 1 << 2,
+        Sensitivity     = 1 << 3,
+        InhibitDuration = 1 << 4,
+        All = Range | RangeTrig | Delay | Sensitivity | InhibitDuration,
+    };
+    constexpr bool operator&(cfg_id_t i1, cfg_id_t i2) { return (std::to_underlying(i1) & std::to_underlying(i2)) != 0; }
+
     enum class err_t
     {
         Ok,
@@ -14,10 +26,12 @@ namespace c4001
         InhibitDuration,
         SaveConfig,
         ResetConfig,
-        Restart
+        Restart,
+        ReloadConfig,
     };
     using err_callback_t = void(*)(err_t);
-    dfr::C4001* setup(err_callback_t err);
+    using upd_callback_t = void(*)(cfg_id_t);
+    dfr::C4001* setup(err_callback_t err, upd_callback_t upd);
 
     void set_range(float from, float to);
     void set_range_trig(float trig);

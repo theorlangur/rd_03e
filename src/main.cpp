@@ -61,6 +61,16 @@ constexpr auto kAttrStatus2 = &zb::zb_zcl_status_t::status2;
 constexpr auto kAttrStatus3 = &zb::zb_zcl_status_t::status3;
 
 /**********************************************************************/
+/* C4001 attributes                                                   */
+/**********************************************************************/
+constexpr auto kAttrRMin = &zb::zb_zcl_c4001_t::range_min;
+constexpr auto kAttrRMax = &zb::zb_zcl_c4001_t::range_max;
+constexpr auto kAttrRTrig = &zb::zb_zcl_c4001_t::range_trig;
+constexpr auto kAttrInhibitDuration = &zb::zb_zcl_c4001_t::inhibit_duration;
+constexpr auto kAttrSTrig = &zb::zb_zcl_c4001_t::sensitivity_detect;
+constexpr auto kAttrSHold = &zb::zb_zcl_c4001_t::sensitivity_hold;
+
+/**********************************************************************/
 /* Occupancy attribute shortcuts                                      */
 /**********************************************************************/
 constexpr auto kAttrOccupancy = &zb::zb_zcl_occupancy_ultrasonic_t::occupancy;
@@ -166,15 +176,56 @@ void on_dev_cb_error(int err)
     printk("on_dev_cb_error: %d\r\n", err);
 }
 
+void zb_c4001_update(uint8_t e)
+{
+    using namespace c4001; 
+    cfg_id_t id = (cfg_id_t)e;
+    if (id & cfg_id_t::Range)
+    {
+	zb_ep.attr<kAttrRMin>() = pC4001->GetRangeFrom();
+	zb_ep.attr<kAttrRMax>() = pC4001->GetRangeTo();
+    }
+    if (id & cfg_id_t::RangeTrig)
+    {
+	zb_ep.attr<kAttrRTrig>() = pC4001->GetTriggerDistance();
+    }
+    if (id & cfg_id_t::Delay)
+    {
+	zb_ep.attr<kAttrClearToDetectDelay>() = pC4001->GetDetectLatency();
+	zb_ep.attr<kAttrDetectToClearDelay>() = pC4001->GetClearLatency();
+    }
+    if (id & cfg_id_t::InhibitDuration)
+    {
+	zb_ep.attr<kAttrInhibitDuration>() = pC4001->GetInhibitDuration();
+    }
+    if (id & cfg_id_t::Sensitivity)
+    {
+	zb_ep.attr<kAttrSTrig>() = pC4001->GetSensitivityTrig();
+	zb_ep.attr<kAttrSHold>() = pC4001->GetSensitivityHold();
+    }
+}
+
 void zb_c4001_error(uint8_t e)
 {
-    switch(c4001::err_t(e))
+    using namespace c4001;
+    //generally: set zb attributes to current values
+    switch(err_t(e))
     {
-	case c4001::err_t::Range:
-	{
-	    //set what C4001 last reported
-	}
-	break;
+	case err_t::Range:
+	    zb_c4001_update((uint8_t)cfg_id_t::Range);
+	    break;
+	case err_t::RangeTrig:
+	    zb_c4001_update((uint8_t)cfg_id_t::RangeTrig);
+	    break;
+	case err_t::Delay:
+	    zb_c4001_update((uint8_t)cfg_id_t::Delay);
+	    break;
+	case err_t::InhibitDuration:
+	    zb_c4001_update((uint8_t)cfg_id_t::InhibitDuration);
+	    break;
+	case err_t::Sensitivity:
+	    zb_c4001_update((uint8_t)cfg_id_t::Sensitivity);
+	    break;
 	default:
 	break;
     }
@@ -185,6 +236,12 @@ void on_c4001_error(c4001::err_t e)
 {
     if (g_ZigbeeReady)
 	zb_schedule_app_callback(&zb_c4001_error, (uint8_t)e);
+}
+
+void on_c4001_upd(c4001::cfg_id_t id)
+{
+    if (g_ZigbeeReady)
+	zb_schedule_app_callback(&zb_c4001_update, (uint8_t)id);
 }
 
 int configure_c4001_out_pin();
@@ -231,7 +288,7 @@ int main(void)
     int err = settings_subsys_init();
     err = settings_load();
 
-    pC4001 = c4001::setup(&on_c4001_error);
+    pC4001 = c4001::setup(&on_c4001_error, &on_c4001_upd);
     if (pC4001)
     {
 	dev_ctx.c4001.range_min = pC4001->GetRangeFrom();

@@ -318,6 +318,18 @@ namespace dfr
         m_C.m_Dbg = false;
     }
 
+    auto C4001::Configurator::ReloadConfig() noexcept -> ExpectedResult
+    {
+        if (!m_CtrResult) return m_CtrResult;
+        return UpdateInhibit()
+            .and_then([](Configurator &cfg){ return cfg.UpdateSensitivity(); })
+            .and_then([](Configurator &cfg){ return cfg.UpdateLatency(); })
+            .and_then([](Configurator &cfg){ return cfg.UpdateRange(); })
+            .and_then([](Configurator &cfg){ return cfg.UpdateTrigRange(); })
+            .and_then([](Configurator &cfg){ return cfg.UpdateHWVersion(); })
+            .and_then([](Configurator &cfg){ return cfg.UpdateSWVersion(); });
+    }
+
     auto C4001::Configurator::SaveConfig() noexcept -> ExpectedResult
     {
         if (!m_CtrResult) return m_CtrResult;

@@ -368,6 +368,7 @@ namespace dfr
                 ExpectedResult SaveConfig() noexcept;
                 ExpectedResult ResetConfig() noexcept;
                 ExpectedResult Restart() noexcept;
+                ExpectedResult ReloadConfig() noexcept;
                 ExpectedResult SwitchToPresenceMode() noexcept;
                 ExpectedResult SwitchToSpeedDistanceMode() noexcept;
                 ExpectedResult UpdateInhibit() noexcept;

@@ -52,8 +52,19 @@ namespace c4001
     struct save_cfg_t{};
     struct reset_cfg_t{};
     struct restart_cfg_t{};
+    struct reload_cfg_t{};
 
-    using QueueItem = std::variant<range_t, range_trig_t, delay_t, sensitivity_t, inhibit_duration_t, save_cfg_t, reset_cfg_t, restart_cfg_t>;
+    using QueueItem = std::variant<
+			      range_t
+			    , range_trig_t
+			    , delay_t
+			    , sensitivity_t
+			    , inhibit_duration_t
+			    , save_cfg_t
+			    , reset_cfg_t
+			    , restart_cfg_t
+			    , reload_cfg_t
+			>;
 
     using C4001Q = msgq::Queue<QueueItem,4>;
     K_MSGQ_DEFINE_TYPED(C4001Q, c4001q);
@@ -67,12 +78,14 @@ K_THREAD_DEFINE(c4001_thread, C4001_THREAD_STACK_SIZE,
 	C4001_THREAD_PRIORITY, 0, -1);
 
     constinit err_callback_t g_err = nullptr;
-    dfr::C4001* setup(err_callback_t err)
+    constinit upd_callback_t g_upd = nullptr;
+    dfr::C4001* setup(err_callback_t err, upd_callback_t upd)
     {
 	auto r = c4001.Init();
 	if (!r)
 	    return nullptr;
 	g_err = err;
+	g_upd = upd;
 	k_thread_start(c4001_thread);
 	return &c4001;
     }
@@ -140,42 +153,107 @@ K_THREAD_DEFINE(c4001_thread, C4001_THREAD_STACK_SIZE,
     void c4001_thread_entry(void *, void *, void *)
     {
 	QueueItem q;
+	using Cfg = dfr::C4001::Configurator;
 	while(1)
 	{
 	    c4001q >> q;
 	    std::visit(
 		overloaded{
 		    [](range_t const& v){ 
-			if (auto r = c4001.GetConfigurator().SetRange(v.from, v.to); !r && g_err)
-			    g_err(err_t::Range);
+			if (auto r = c4001
+				.GetConfigurator()
+				.SetRange(v.from, v.to)
+				.and_then([](Cfg &cfg){ return cfg.SaveConfig(); })
+				.and_then([](Cfg &cfg){ return cfg.UpdateRange(); }); !r)
+			{
+			    if (g_err) g_err(err_t::Range);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::Range);
 		    }
 		    ,[](range_trig_t const& v){  
-			if (auto r = c4001.GetConfigurator().SetTrigRange(v.trig); !r && g_err)
-			    g_err(err_t::RangeTrig);
+			if (auto r = c4001
+				.GetConfigurator()
+				.SetTrigRange(v.trig)
+				.and_then([](Cfg &cfg){ return cfg.SaveConfig(); })
+				.and_then([](Cfg &cfg){ return cfg.UpdateTrigRange(); }); !r)
+			{
+			    if (g_err) g_err(err_t::RangeTrig);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::RangeTrig);
 		    }
 		    ,[](delay_t const& v){  
-			if (auto r = c4001.GetConfigurator().SetLatency(v.detect, v.clear); !r && g_err)
-			    g_err(err_t::Delay);
+			if (auto r = c4001
+				.GetConfigurator()
+				.SetLatency(v.detect, v.clear)
+				.and_then([](Cfg &cfg){ return cfg.SaveConfig(); })
+				.and_then([](Cfg &cfg){ return cfg.UpdateLatency(); }); !r)
+			{
+			    if (g_err) g_err(err_t::Delay);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::Delay);
 		    }
 		    ,[](sensitivity_t const& v){  
-			if (auto r = c4001.GetConfigurator().SetSensitivity(v.detect, v.hold); !r && g_err)
-			    g_err(err_t::Sensitivity);
+			if (auto r = c4001
+				.GetConfigurator()
+				.SetSensitivity(v.detect, v.hold)
+				.and_then([](Cfg &cfg){ return cfg.SaveConfig(); })
+				.and_then([](Cfg &cfg){ return cfg.UpdateSensitivity(); }); !r)
+			{
+			    if (g_err) g_err(err_t::Sensitivity);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::Sensitivity);
 		    }
 		    ,[](inhibit_duration_t const& v){  
-			if (auto r = c4001.GetConfigurator().SetInhibit(v.duration); !r && g_err)
-			    g_err(err_t::InhibitDuration);
+			if (auto r = c4001
+				.GetConfigurator()
+				.SetInhibit(v.duration)
+				.and_then([](Cfg &cfg){ return cfg.SaveConfig(); })
+				.and_then([](Cfg &cfg){ return cfg.UpdateInhibit(); }); !r)
+			{
+			    if (g_err) g_err(err_t::InhibitDuration);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::InhibitDuration);
 		    }
 		    ,[](save_cfg_t const& v){  
-			if (auto r = c4001.GetConfigurator().SaveConfig(); !r && g_err)
+			if (auto r = c4001
+				.GetConfigurator()
+				.SaveConfig(); !r && g_err)
 			    g_err(err_t::SaveConfig);
 		    }
 		    ,[](reset_cfg_t const& v){  
-			if (auto r = c4001.GetConfigurator().ResetConfig(); !r && g_err)
-			    g_err(err_t::ResetConfig);
+			if (auto r = c4001
+				.GetConfigurator()
+				.ResetConfig(); !r)
+			{
+			    if (g_err) g_err(err_t::ResetConfig);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::All);
 		    }
 		    ,[](restart_cfg_t const& v){  
-			if (auto r = c4001.GetConfigurator().Restart(); !r && g_err)
-			    g_err(err_t::Restart);
+			if (auto r = c4001
+				.GetConfigurator()
+				.Restart(); !r)
+			{
+			    if (g_err) g_err(err_t::Restart);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::All);
+		    }
+		    ,[](reload_cfg_t const& v){  
+			if (auto r = c4001
+				.GetConfigurator()
+				.ReloadConfig(); !r)
+			{
+			    if (g_err) g_err(err_t::ReloadConfig);
+			}
+			else if (g_upd)
+			    g_upd(cfg_id_t::All);
 		    }
 		},
 		q
