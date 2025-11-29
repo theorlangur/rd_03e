@@ -116,29 +116,28 @@ namespace uart
             return ExpectedResult(std::ref(c));
         }
 
-        inline auto match_bytes(Channel &c, const char *pStr, const char *pCtx = "")
+        [[gnu::always_inline]]inline auto match_bytes(Channel &c, const char *pStr, const char *pCtx = "")
         {
             return uart::primitives::match_bytes(c, (const uint8_t*)pStr, 0, pCtx);
         }
 
         template<size_t N>
-        inline auto match_bytes(Channel &c, const char (&arr)[N], const char *pCtx = "")
+        [[gnu::always_inline]]inline auto match_bytes(Channel &c, const char (&arr)[N], const char *pCtx = "")
         {
             return uart::primitives::match_bytes(c, (const uint8_t*)arr, 0, pCtx);
         }
 
         template<size_t N>
-        inline auto match_bytes(Channel &c, const uint8_t (&arr)[N], const char *pCtx = "")
+        [[gnu::always_inline]]inline auto match_bytes(Channel &c, const uint8_t (&arr)[N], const char *pCtx = "")
         {
             return uart::primitives::match_bytes(c, std::span<const uint8_t>(arr, N), {.pCtx = pCtx});
         }
 
-        template<class... BytePtr>
-        inline auto match_any_bytes_term(Channel &c, uint8_t term, BytePtr&&... bytes)
+        inline auto match_any_bytes_term(Channel &c, uint8_t term, std::same_as<std::span<const uint8_t>&> auto&&... bytes)
         {
             using MatchAnyResult = Channel::RetVal<int>;
             using ExpectedResult = std::expected<MatchAnyResult, Err>;
-            const uint8_t* sequences[sizeof...(BytePtr)]={(const uint8_t*)bytes...};
+            const uint8_t* sequences[sizeof...(bytes)]={bytes.data()...};
             bool anyValidLeft = true;
             size_t idx = 0;
 
@@ -175,10 +174,9 @@ namespace uart
         template<class C>
         concept convertible_to_const_char_ptr = requires(C &c) { {c}->std::convertible_to<const char*>; };
 
-        template<class... BytePtr> requires (convertible_to_const_char_ptr<BytePtr> &&...)
-        inline auto match_any_str(Channel &c, BytePtr&&... bytes)
+        [[gnu::always_inline]]inline auto match_any_str(Channel &c, convertible_to_const_char_ptr auto&&... bytes)
         {
-            return uart::primitives::match_any_bytes_term(c, 0, std::forward<BytePtr>(bytes)...);
+            return uart::primitives::match_any_bytes_term(c, 0, std::span<const uint8_t>{bytes.data(), bytes.size()}...);
         }
 
         inline auto read_until(Channel &c, uint8_t until, duration_ms_t maxWait = kDefault, const char *pCtx = "")
@@ -241,8 +239,7 @@ namespace uart
             return ExpectedResult(std::unexpected(::Err{"read_until timeout", ERR_OK}));
         }
 
-        template<size_t N>
-        inline auto find_bytes(Channel &c, const uint8_t (&arr)[N], duration_ms_t maxWait = kDefault, const char *pCtx = "")
+        inline auto find_bytes(Channel &c, std::span<const uint8_t> arr, duration_ms_t maxWait = kDefault, const char *pCtx = "")
         {
             using ExpectedResult = std::expected<Channel::Ref, ::Err>;
             auto start = k_uptime_get();
@@ -257,7 +254,7 @@ namespace uart
                     return ExpectedResult(std::unexpected(r.error()));
                 if (!check_timeout())
                     return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
-                if (auto r = match_bytes(c, arr, maxWait, pCtx); r)
+                if (auto r = match_bytes(c, arr, {.maxWait = maxWait, .pCtx = pCtx}); r)
                     return ExpectedResult(std::ref(c));
             }
             return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
@@ -290,13 +287,12 @@ namespace uart
             return ExpectedResult(std::unexpected(::Err{"find_bytes timeout", ERR_OK}));
         }
 
-        inline auto find_bytes(Channel &c, const char *str, duration_ms_t maxWait = kDefault, const char *pCtx = "")
+        [[gnu::always_inline]]inline auto find_bytes(Channel &c, const char *str, duration_ms_t maxWait = kDefault, const char *pCtx = "")
         {
             return find_bytes(c, (const uint8_t*)str, 0, maxWait, pCtx);
         }
 
-        template<class... BytePtr>
-        inline auto find_any_bytes(cfg_t cfg, Channel &c, uint8_t term, BytePtr&&... arr)
+        inline auto find_any_bytes(cfg_t cfg, Channel &c, uint8_t term, std::same_as<std::span<const uint8_t>> auto&&... arr)
         {
             using FindAnyResult = Channel::RetVal<int>;
             using ExpectedResult = std::expected<FindAnyResult, Err>;
@@ -313,16 +309,21 @@ namespace uart
                     return ExpectedResult(std::unexpected(r.error()));
                 if (!check_timeout())
                     return ExpectedResult(std::unexpected(::Err{"find_any_bytes timeout", ERR_OK}));
-                if (auto r = match_any_bytes_term(c, term, std::forward<BytePtr>(arr)...); r)
+                if (auto r = match_any_bytes_term(c, term, arr...); r)
                     return ExpectedResult(FindAnyResult{std::ref(c), (*r).v});
             }
             return ExpectedResult(std::unexpected(::Err{"find_any_bytes timeout", ERR_OK}));
         }
 
-        template<class... BytePtr> requires (convertible_to_const_char_ptr<BytePtr> &&...)
-        inline auto find_any_str(cfg_t cfg, Channel &c, BytePtr&&... str)
+        [[gnu::always_inline]]inline auto find_any_str_impl(cfg_t cfg, Channel &c, std::same_as<std::string_view> auto&&... str)
         {
-            return find_any_bytes(cfg, c, 0, std::forward<BytePtr>(str)...);
+            return find_any_bytes(cfg, c, 0, std::span<const uint8_t>{(const uint8_t*)str.data(), str.size()}...);
+        }
+
+        template<class... BytePtr> requires (convertible_to_const_char_ptr<BytePtr> &&...)
+        [[gnu::always_inline]]inline auto find_any_str(cfg_t cfg, Channel &c, BytePtr&&... str)
+        {
+            return find_any_str_impl(cfg, c, std::string_view(str)...);
         }
 
         inline auto read_until_into(Channel &c, uint8_t until, uint8_t *pDst, size_t dstSize, bool consume_last, cfg_t cfg)
@@ -417,6 +418,16 @@ namespace uart
 
             static constexpr size_t size() { return 0; }
             auto run(Channel &c) { return uart::primitives::find_bytes(c, pStr); }
+        };
+
+        struct find_sv_t
+        {
+            using functional_read_helper = void;
+            std::string_view sv;
+            const char *pCtx = "";
+
+            static constexpr size_t size() { return 0; }
+            auto run(Channel &c) { return uart::primitives::find_bytes(c, std::span<const uint8_t>{(const uint8_t*)sv.begin(), sv.size()}, kDefault, pCtx); }
         };
 
         template<size_t N>
