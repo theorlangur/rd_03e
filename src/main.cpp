@@ -80,13 +80,6 @@ constexpr auto kAttrClearToDetectDelay = &zb::zb_zcl_occupancy_ultrasonic_t::Ult
 constexpr auto kCmdOn = &zb::zb_zcl_on_off_attrs_client_t::on;
 constexpr auto kCmdOff = &zb::zb_zcl_on_off_attrs_client_t::off;
 
-//forward declare
-/**********************************************************************/
-/* Support for On/Off cluster client commands                         */
-/**********************************************************************/
-template<> struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
-using custom_accel_handler_t = zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
-
 /* Zigbee device application context storage. */
 static constinit device_ctx_t dev_ctx{
     .basic_attr = {
@@ -115,6 +108,8 @@ constinit static auto &zb_ep = zb_ctx.ep<kMMW_EP>();
 /**********************************************************************/
 /* Support for On/Off cluster client commands                         */
 /**********************************************************************/
+template<> struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
+using custom_accel_handler_t = zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
 //magic handwaving to avoid otherwise necessary command handling boilerplate
 //uses CRTP so that cluster_custom_handler_base_t would know the end type it needs to work with
 template<> 
@@ -155,6 +150,7 @@ void presence_triggered(const struct device *port,
 					gpio_port_pins_t pins)
 {
     int val = gpio_pin_get_dt(&presence);
+    //TODO: remove me
     gpio_pin_set_dt(&led, val);
 
     if (g_ZigbeeReady) //post to zigbee and shoot commands
