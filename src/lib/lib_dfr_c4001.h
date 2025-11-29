@@ -64,6 +64,16 @@ namespace dfr
     {
     };
 
+    template<>
+    struct Sendable<std::string_view>
+    {
+        static constexpr const bool value = true;
+        static auto send(uart::Channel &c, std::string_view const& s)
+        {
+            return c.Send((const uint8_t*)s.data(), s.size());
+        }
+    };
+
     template<Invokable T>
     struct Sendable<T>
     {
@@ -204,7 +214,7 @@ namespace dfr
             }
 
             template<class... ToSend> 
-            ExpectedResult SendCmdNoResp(ToSend&&...args) 
+            ExpectedResult SendCmdNoResp(std::string_view cmd, ToSend&&...args) 
             { 
                 static_assert((Sendable<ToSend>::value && ... && true), "All arguments must be sendable");
                 Channel::ExpectedResult _r(std::ref(*this));
@@ -219,6 +229,7 @@ namespace dfr
                         _r = Sendable<decltype(" ")>::send(*this, " ");
                     _r = std::move(Sendable<std::remove_cvref_t<SendArg>>::send(*this, std::forward<SendArg>(a)));
                 };
+                send_one(cmd);
                 (send_one(std::forward<ToSend>(args)),...);
                 TRY_UART_COMM(_r, "SendArgs");
                 TRY_UART_COMM(Sendable<decltype("\r\n")>::send(*this, "\r\n"), "<endl>");
@@ -228,7 +239,7 @@ namespace dfr
 
 
             template<class... ToSend> 
-            ExpectedResult SendCmd(ToSend&&...args) 
+            ExpectedResult SendCmd(std::string_view cmd, ToSend&&...args) 
             { 
                 static_assert((Sendable<std::remove_cvref_t<ToSend>>::value && ... && true), "All arguments must be sendable");
                 Channel::ExpectedResult _r(std::ref(*this));
@@ -243,6 +254,7 @@ namespace dfr
                         _r = Sendable<decltype(" ")>::send(*this, " ");
                     _r = std::move(Sendable<std::remove_cvref_t<SendArg>>::send(*this, std::forward<SendArg>(a)));
                 };
+                send_one(cmd);
                 (send_one(std::forward<ToSend>(args)),...);
                 TRY_UART_COMM(_r, "SendArgs");
 
@@ -258,7 +270,7 @@ namespace dfr
             }
 
             template<class... ToSend, class... ToRecv> 
-            ExpectedResult SendCmdWithParams(std::tuple<ToSend...> tosend, std::tuple<ToRecv...> torecv, bool dbg = false) 
+            ExpectedResult SendCmdWithParams(std::string_view cmd, std::tuple<ToSend...> tosend, std::tuple<ToRecv...> torecv, bool dbg = false) 
             { 
                 static_assert((Sendable<std::remove_cvref_t<ToSend>>::value && ... && true), "All arguments must be sendable");
                 Channel::ExpectedResult _r(std::ref(*this));
@@ -277,6 +289,7 @@ namespace dfr
                 {
                     (send_one(std::get<idx>(tosend)),...);
                 };
+                send_one(cmd);
                 send_tuple(std::make_index_sequence<sizeof...(ToSend)>());
                 TRY_UART_COMM(_r, "SendArgs");
                 TRY_UART_COMM(SendTpl("\r\n"), "<endl>");
@@ -304,27 +317,15 @@ namespace dfr
             }
 
             template<class... ToSend, class... ToRecv> 
-            ExpectedResult SendCmdWithParamsStd(std::tuple<ToSend...> tosend, std::tuple<ToRecv...> torecv, bool dbg = false) 
+            ExpectedResult SendCmdWithParamsStd(std::string_view cmd, std::tuple<ToSend...> tosend, std::tuple<ToRecv...> torecv, bool dbg = false) 
             { 
-                static_assert(sizeof...(ToSend) > 0);
-                constexpr auto isUint8 = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, uint8_t*>;
-                constexpr auto isConstUint8 = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, const uint8_t*>;
-                constexpr auto isChar = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, char*>;
-                constexpr auto isConstChar = std::same_as<std::decay_t<decltype(std::get<0>(tosend))>, const char*>;
-                constexpr auto isConstCharSpan = std::same_as<std::remove_cvref_t<decltype(std::get<0>(tosend))>, std::span<const char>>;
-                static_assert(isUint8 || isConstUint8 || isChar || isConstChar || isConstCharSpan);
-
-                const char *pCmd;
-                if constexpr (isConstCharSpan)
-                    pCmd = std::get<0>(tosend).data();
-                else
-                    pCmd = (const char*)std::get<0>(tosend);
                 using namespace uart::primitives;
                 return SendCmdWithParams(
+                        cmd,
                         std::move(tosend),
                         std::tuple_cat(to_recv(
-                                    find_str_t{pCmd},
-                                    find_str_t{"Response "})
+                                    find_sv_t{cmd},
+                                    find_sv_t{"Response "})
                                 , torecv)
                     );
             }
