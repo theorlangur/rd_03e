@@ -102,22 +102,17 @@ constinit static auto zb_ctx = zb::make_device(
 	    )
 	);
 
+/**********************************************************************/
+/* Defining access to the global zigbee device context                */
+/**********************************************************************/
+//needed for proper command handling
+struct zb::global_device
+{
+    static auto& get() { return zb_ctx; }
+};
+
 //a shortcut for a convenient access
 constinit static auto &zb_ep = zb_ctx.ep<kMMW_EP>();
-
-/**********************************************************************/
-/* Support for On/Off cluster client commands                         */
-/**********************************************************************/
-template<> struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
-using custom_accel_handler_t = zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>;
-//magic handwaving to avoid otherwise necessary command handling boilerplate
-//uses CRTP so that cluster_custom_handler_base_t would know the end type it needs to work with
-template<> 
-struct zb::cluster_custom_handler_t<zb::zb_zcl_on_off_attrs_client_t, kMMW_EP>: cluster_custom_handler_base_t<custom_accel_handler_t>
-{
-    //the rest will be done by cluster_custom_handler_base_t
-    static auto& get_device() { return zb_ctx; }
-};
 
 /**********************************************************************/
 /* Device defines                                                     */
