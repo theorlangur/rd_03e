@@ -133,7 +133,10 @@ namespace uart
             return uart::primitives::match_bytes(c, std::span<const uint8_t>(arr, N), {.pCtx = pCtx});
         }
 
-        inline auto match_any_bytes_term(Channel &c, uint8_t term, std::same_as<std::span<const uint8_t>&> auto&&... bytes)
+        template<class C1, class C2>
+        concept same_as_no_ref = std::same_as<C1, C2> || std::same_as<C1, C2&> || std::same_as<C1, C2&>;
+
+        inline auto match_any_bytes_term(Channel &c, uint8_t term, same_as_no_ref<std::span<const uint8_t>> auto&&... bytes)
         {
             using MatchAnyResult = Channel::RetVal<int>;
             using ExpectedResult = std::expected<MatchAnyResult, Err>;
