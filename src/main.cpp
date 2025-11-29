@@ -278,11 +278,6 @@ void zboss_signal_handler(zb_bufid_t bufid)
     }							
 }
 
-void on_detect_to_clear_delay_changed(float v)
-{
-    c4001::set_clear_delay(v);
-}
-
 int main(void)
 {
     int err = settings_subsys_init();
@@ -305,10 +300,14 @@ int main(void)
     //zb_ep.attribute_desc<>();
     auto dev_cb = zb::tpl_device_cb<
 	zb::dev_cb_handlers_desc{ .error_handler = on_dev_cb_error }
-	, zb::set_attr_val_gen_desc_t{
-	    zb_ep.attribute_desc<kAttrDetectToClearDelay>()
-	    ,zb::to_handler_v<on_detect_to_clear_delay_changed>
-	  }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrDetectToClearDelay>() ,zb::to_handler_v<c4001::set_clear_delay> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrClearToDetectDelay>() ,zb::to_handler_v<c4001::set_detect_delay> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrRMin>()               ,zb::to_handler_v<c4001::set_range_from> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrRMax>()               ,zb::to_handler_v<c4001::set_range_to> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrRTrig>()              ,zb::to_handler_v<c4001::set_range_trig> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrInhibitDuration>()    ,zb::to_handler_v<c4001::set_inhibit_duration> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrSTrig>()              ,zb::to_handler_v<c4001::set_detect_sensitivity> }
+	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrSHold>()              ,zb::to_handler_v<c4001::set_hold_sensitivity> }
     >;
 
     ZB_ZCL_REGISTER_DEVICE_CB(dev_cb);
@@ -323,7 +322,15 @@ int main(void)
     }
 
     printk("Main: sleep forever\r\n");
-    //test_func();
+    {
+	printk("C4001; HW=%s\r\n", pC4001->GetHWVer().m_Version);
+	printk("C4001; SW=%s\r\n", pC4001->GetSWVer().m_Version);
+	printk("C4001; Range=%.1f to %.1fm\r\n", (double)pC4001->GetRangeFrom(), (double)pC4001->GetRangeTo());
+	printk("C4001; Latency; to detect=%.1fs; to clear=%.1fs\r\n", (double)pC4001->GetDetectLatency(), (double)pC4001->GetClearLatency());
+	printk("C4001; Trig Range=%.1fm\r\n", (double)pC4001->GetTriggerDistance());
+	printk("C4001; Sensitivity Detect=%d; Hold=%d;\r\n", pC4001->GetSensitivityTrig(), pC4001->GetSensitivityHold());
+	printk("C4001; Inhibut Duration=%.1fs\r\n", (double)pC4001->GetInhibitDuration());
+    }
     while (1) {
 	k_sleep(K_FOREVER);
     }

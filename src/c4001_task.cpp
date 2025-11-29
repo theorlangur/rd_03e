@@ -95,6 +95,16 @@ K_THREAD_DEFINE(c4001_thread, C4001_THREAD_STACK_SIZE,
 	c4001q << range_t{.from = from, .to = to};
     }
 
+    void set_range_from(float v)
+    {
+	c4001q << range_t{.from = v, .to = c4001.GetRangeTo()};
+    }
+
+    void set_range_to(float v)
+    {
+	c4001q << range_t{.from = c4001.GetRangeFrom(), .to = v};
+    }
+
     void set_range_trig(float trig)
     {
 	c4001q << range_trig_t{.trig = trig};

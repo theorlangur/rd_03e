@@ -34,6 +34,8 @@ namespace c4001
     dfr::C4001* setup(err_callback_t err, upd_callback_t upd);
 
     void set_range(float from, float to);
+    void set_range_from(float v);
+    void set_range_to(float v);
     void set_range_trig(float trig);
     void set_detect_delay(float v);
     void set_clear_delay(float v);
