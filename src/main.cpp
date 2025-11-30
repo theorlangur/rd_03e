@@ -150,6 +150,11 @@ void presence_triggered(const struct device *port,
 
     if (g_ZigbeeReady) //post to zigbee and shoot commands
 	zb_schedule_app_callback(&send_on_off, val);
+    else
+    {
+	//write latest state directly
+	dev_ctx.occupancy.occupancy = val;
+    }
 }
 
 void send_on_off(uint8_t val)
@@ -160,7 +165,6 @@ void send_on_off(uint8_t val)
     else
 	zb_ep.send_cmd<kCmdOff>();
 }
-
 
 void on_dev_cb_error(int err)
 {
@@ -235,6 +239,17 @@ void on_c4001_upd(c4001::cfg_id_t id)
 	zb_schedule_app_callback(&zb_c4001_update, (uint8_t)id);
 }
 
+void on_uto_delay_changed(uint16_t d)
+{
+    c4001::set_detect_delay(d);
+}
+
+void on_otu_delay_changed(uint16_t d)
+{
+    c4001::set_clear_delay(d);
+}
+
+
 int configure_c4001_out_pin();
 
 void on_zigbee_start()
@@ -288,17 +303,16 @@ int main(void)
     }
 
     /* Register callback for handling ZCL commands. */
-    //zb_ep.attribute_desc<>();
     auto dev_cb = zb::tpl_device_cb<
 	zb::dev_cb_handlers_desc{ .error_handler = on_dev_cb_error }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrDetectToClearDelay>() ,zb::to_handler_v<c4001::set_clear_delay> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrClearToDetectDelay>() ,zb::to_handler_v<c4001::set_detect_delay> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrRMin>()               ,zb::to_handler_v<c4001::set_range_from> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrRMax>()               ,zb::to_handler_v<c4001::set_range_to> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrRTrig>()              ,zb::to_handler_v<c4001::set_range_trig> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrInhibitDuration>()    ,zb::to_handler_v<c4001::set_inhibit_duration> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrSTrig>()              ,zb::to_handler_v<c4001::set_detect_sensitivity> }
-	, zb::set_attr_val_gen_desc_t{ zb_ep.attribute_desc<kAttrSHold>()              ,zb::to_handler_v<c4001::set_hold_sensitivity> }
+	, zb::handle_set_for<kAttrDetectToClearDelay, c4001::set_clear_delay>(zb_ep)
+	, zb::handle_set_for<kAttrClearToDetectDelay, c4001::set_detect_delay>(zb_ep)
+	, zb::handle_set_for<kAttrRMin,               c4001::set_range_from>(zb_ep)
+	, zb::handle_set_for<kAttrRMax,               c4001::set_range_to>(zb_ep)
+	, zb::handle_set_for<kAttrRTrig,              c4001::set_range_trig>(zb_ep)
+	, zb::handle_set_for<kAttrInhibitDuration,    c4001::set_inhibit_duration>(zb_ep)
+	, zb::handle_set_for<kAttrSTrig,              c4001::set_detect_sensitivity>(zb_ep)
+	, zb::handle_set_for<kAttrSHold,              c4001::set_hold_sensitivity>(zb_ep)
     >;
 
     ZB_ZCL_REGISTER_DEVICE_CB(dev_cb);
