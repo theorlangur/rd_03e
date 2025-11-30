@@ -12,7 +12,7 @@ extern "C"
 
 namespace zb
 {
-    static constexpr uint16_t kZB_ZCL_CLUSTER_ID_C4001 = 0xfc80;
+    static constexpr uint16_t kZB_ZCL_CLUSTER_ID_C4001 = 0xfc81;
     struct zb_zcl_c4001_t
     {
         float range_min = 0.6f;
