@@ -65,9 +65,10 @@ const orlangurC4001Extended = {
                 convert: (model, msg, publish, options, meta) => {
                     const result = {};
                     const data = msg.data;
-                    for attr in attributes
+                    for (const attr in attributes) {
                         if (data[attr] !== undefined) 
                             result[attr] = data[attr];
+                    }
                     return result;
                 }
             }
@@ -143,6 +144,16 @@ const definition = {
     vendor: 'SFINAE',
     description: 'C4001-NG',
     extend: [
+        deviceAddCustomCluster('customStatus', {
+            ID: 0xfc80,
+            attributes: {
+                status1: {ID: 0x0000, type: Zcl.DataType.INT16},
+                status2: {ID: 0x0001, type: Zcl.DataType.INT16},
+                status3: {ID: 0x0002, type: Zcl.DataType.INT16},
+            },
+            commands: {},
+            commandsResponse: {}
+        }),
         deviceAddCustomCluster('c40001Config', {
             ID: 0xfc80,
             attributes: {
@@ -161,7 +172,7 @@ const definition = {
         }),
         orlangurC4001Extended.c4001Config(),
         orlangurC4001Extended.extendedStatus(),
-        e.occupancy({ultrasonicConfig:["otu_delay", "uto_delay"]})
+        occupancy({pirConfig:["otu_delay", "uto_delay"]},{ultrasonicConfig:["otu_delay", "uto_delay"]})
     ],
     configure: async (device, coordinatorEndpoint) => {
         const endpoint = device.getEndpoint(1);
