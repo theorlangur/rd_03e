@@ -155,7 +155,7 @@ const definition = {
             commandsResponse: {}
         }),
         deviceAddCustomCluster('c40001Config', {
-            ID: 0xfc80,
+            ID: 0xfc81,
             attributes: {
                 range_min:            {ID: 0x0000, type: Zcl.DataType.SINGLE_PREC},
                 range_max:            {ID: 0x0001, type: Zcl.DataType.SINGLE_PREC},

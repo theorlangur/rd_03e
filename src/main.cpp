@@ -31,6 +31,7 @@ static bool g_ZigbeeReady = false;
 
 /* Model number assigned by manufacturer (32-bytes long string). */
 #define INIT_BASIC_MODEL_ID        "C4001-NG"
+//#define INIT_SW_VER                "C4001-1.0"
 
 
 /* Button used to enter the Bulb into the Identify mode. */
@@ -46,7 +47,7 @@ constexpr uint16_t kDEV_ID = 0xBAAD;
 struct device_ctx_t{
     zb::zb_zcl_basic_names_t basic_attr;
     zb::zb_zcl_status_t status_attr;
-    zb::zb_zcl_occupancy_ultrasonic_t occupancy;
+    zb::zb_zcl_occupancy_pir_and_ultrasonic_t occupancy;
     zb::zb_zcl_on_off_attrs_client_t on_off_client;
     zb::zb_zcl_c4001_t c4001;
 };
@@ -85,7 +86,7 @@ static constinit device_ctx_t dev_ctx{
     .basic_attr = {
 	{
 	    .zcl_version = ZB_ZCL_VERSION,
-	    .power_source = zb::zb_zcl_basic_min_t::PowerSource::DC
+	    .power_source = zb::zb_zcl_basic_min_t::PowerSource::DC,
 	},
 	/*.manufacturer =*/ INIT_BASIC_MANUF_NAME,
 	/*.model =*/ INIT_BASIC_MODEL_ID,
@@ -97,8 +98,8 @@ constinit static auto zb_ctx = zb::make_device(
 	    dev_ctx.basic_attr
 	    , dev_ctx.status_attr
 	    , dev_ctx.occupancy
-	    , dev_ctx.on_off_client
 	    , dev_ctx.c4001
+	    , dev_ctx.on_off_client
 	    )
 	);
 
