@@ -75,8 +75,8 @@ constexpr auto kAttrSHold = &zb::zb_zcl_c4001_t::sensitivity_hold;
 /* Occupancy attribute shortcuts                                      */
 /**********************************************************************/
 constexpr auto kAttrOccupancy = &zb::zb_zcl_occupancy_ultrasonic_t::occupancy;
-constexpr auto kAttrDetectToClearDelay = &zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicOccupiedToUnoccupiedDelay;
-constexpr auto kAttrClearToDetectDelay = &zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicUnoccupiedToOccupiedDelay;
+constexpr auto kAttrDetectToClearDelay = &zb::zb_zcl_c4001_t::clear_delay; //&zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicOccupiedToUnoccupiedDelay;
+constexpr auto kAttrClearToDetectDelay = &zb::zb_zcl_c4001_t::detect_delay;//&zb::zb_zcl_occupancy_ultrasonic_t::UltrasonicUnoccupiedToOccupiedDelay;
 
 constexpr auto kCmdOn = &zb::zb_zcl_on_off_attrs_client_t::on;
 constexpr auto kCmdOff = &zb::zb_zcl_on_off_attrs_client_t::off;

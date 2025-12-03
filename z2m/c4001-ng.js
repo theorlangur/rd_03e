@@ -30,6 +30,16 @@ const orlangurC4001Extended = {
                 .withValueMin(0.6)
                 .withValueMax(25)
                 .withCategory('config'),
+            e.numeric('detect_delay', ea.ALL)
+                .withLabel('Range From')
+                .withValueMin(0)
+                .withValueMax(20)
+                .withCategory('config'),
+            e.numeric('clear_delay', ea.ALL)
+                .withLabel('Range To')
+                .withValueMin(0)
+                .withValueMax(20)
+                .withCategory('config'),
             e.numeric('range_trig', ea.ALL)
                 .withLabel('Trigger Distance')
                 .withValueMin(0.6)
@@ -60,7 +70,7 @@ const orlangurC4001Extended = {
                 .withDescription("Restart C4001")
                 .withCategory("config"),
         ];
-        const attributes = ['range_min', 'range_max', 'range_trig', 'inhibit_duration', 'sensitivity_detect', 'sensitivity_hold', 'sw_ver', 'hw_ver'];
+        const attributes = ['range_min', 'range_max', 'range_trig', 'inhibit_duration', 'sensitivity_detect', 'sensitivity_hold', 'sw_ver', 'hw_ver', 'detect_delay', 'clear_delay'];
         const fromZigbee = [
             {
                 cluster: 'c40001Config',
@@ -177,6 +187,9 @@ const definition = {
 
                 sw_ver:               {ID: 0x0006, type: Zcl.DataType.CHAR_STR},
                 hw_ver:               {ID: 0x0007, type: Zcl.DataType.CHAR_STR},
+
+                detect_delay:         {ID: 0x0008, type: Zcl.DataType.SINGLE_PREC},
+                clear_delay:          {ID: 0x0009, type: Zcl.DataType.SINGLE_PREC},
             },
             commands: {
                 restartC4001: {
@@ -188,7 +201,7 @@ const definition = {
         }),
         orlangurC4001Extended.c4001Config(),
         orlangurC4001Extended.extendedStatus(),
-        occupancy({pirConfig:["otu_delay", "uto_delay"]},{ultrasonicConfig:["otu_delay", "uto_delay"]})
+        occupancy({/*pirConfig:["otu_delay", "uto_delay"],ultrasonicConfig:["otu_delay", "uto_delay"]*/})
     ],
     configure: async (device, coordinatorEndpoint) => {
         const endpoint = device.getEndpoint(1);
@@ -197,6 +210,8 @@ const definition = {
             , 'inhibit_duration'
             , 'sensitivity_detect' 
             , 'sensitivity_hold' 
+            , 'detect_delay' 
+            , 'clear_delay' 
             , 'sw_ver' 
             , 'hw_ver' 
         ]);

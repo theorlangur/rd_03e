@@ -19,6 +19,8 @@ namespace zb
         float range_max = 25;
         float range_trig = 8;
         float inhibit_duration = 0;
+        float detect_delay = 0.f;
+        float clear_delay = 0.f;
         uint8_t sensitivity_detect = 5;
         uint8_t sensitivity_hold = 5;
         ZigbeeStr<32> sw_ver;
@@ -41,6 +43,8 @@ namespace zb
                     ,attribute_t{.m = &T::sensitivity_hold,   .id = 0x0005, .a=Access::RW}
                     ,attribute_t{.m = &T::sw_ver,             .id = 0x0006, .a=Access::Read}
                     ,attribute_t{.m = &T::hw_ver,             .id = 0x0007, .a=Access::Read}
+                    ,attribute_t{.m = &T::detect_delay,       .id = 0x0008, .a=Access::RW}
+                    ,attribute_t{.m = &T::clear_delay,        .id = 0x0009, .a=Access::RW}
                 >{},
                 commands_t<
                     &T::cmd_restart
