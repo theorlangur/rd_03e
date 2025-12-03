@@ -56,6 +56,9 @@ const orlangurC4001Extended = {
             e.numeric('hw_ver', ea.STATE_GET)
                 .withLabel('Hardware Version')
                 .withCategory('diagnostic'),
+            e.enum("cmd_restart", ea.SET, ["Restart"])
+                .withDescription("Restart C4001")
+                .withCategory("config"),
         ];
         const attributes = ['range_min', 'range_max', 'range_trig', 'inhibit_duration', 'sensitivity_detect', 'sensitivity_hold', 'sw_ver', 'hw_ver'];
         const fromZigbee = [
@@ -83,6 +86,14 @@ const orlangurC4001Extended = {
                 convertSet: async (entity, key, value, meta) => {
                     await entity.write('c40001Config', {[key]: value});
                     return {state: {[key]: value}};
+                },
+            },
+            {
+                key: "cmd_restart",
+                convertSet: async (entity, key, value, meta) => {
+                    await entity.command("c40001Config", "restartC4001", {}, {
+                        disableDefaultResponse: true,
+                    });
                 },
             }
         ];
@@ -167,7 +178,12 @@ const definition = {
                 sw_ver:               {ID: 0x0006, type: Zcl.DataType.CHAR_STR},
                 hw_ver:               {ID: 0x0007, type: Zcl.DataType.CHAR_STR},
             },
-            commands: {},
+            commands: {
+                restartC4001: {
+                    ID: 0x01,
+                    parameters: [],
+                },
+            },
             commandsResponse: {}
         }),
         orlangurC4001Extended.c4001Config(),

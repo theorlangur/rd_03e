@@ -23,6 +23,7 @@ namespace zb
         uint8_t sensitivity_hold = 5;
         ZigbeeStr<32> sw_ver;
         ZigbeeStr<32> hw_ver;
+        cmd_in_t<1> cmd_restart;
     };
 
     template<> struct zcl_description_t<zb_zcl_c4001_t> {
@@ -40,6 +41,9 @@ namespace zb
                     ,attribute_t{.m = &T::sensitivity_hold,   .id = 0x0005, .a=Access::RW}
                     ,attribute_t{.m = &T::sw_ver,             .id = 0x0006, .a=Access::Read}
                     ,attribute_t{.m = &T::hw_ver,             .id = 0x0007, .a=Access::Read}
+                >{},
+                commands_t<
+                    &T::cmd_restart
                 >{}
             >{};
         }

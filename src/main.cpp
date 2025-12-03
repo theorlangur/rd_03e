@@ -81,6 +81,8 @@ constexpr auto kAttrClearToDetectDelay = &zb::zb_zcl_occupancy_ultrasonic_t::Ult
 constexpr auto kCmdOn = &zb::zb_zcl_on_off_attrs_client_t::on;
 constexpr auto kCmdOff = &zb::zb_zcl_on_off_attrs_client_t::off;
 
+zb::CmdHandlingResult on_cmd_restart();
+
 /* Zigbee device application context storage. */
 static constinit device_ctx_t dev_ctx{
     .basic_attr = {
@@ -91,6 +93,9 @@ static constinit device_ctx_t dev_ctx{
 	/*.manufacturer =*/ INIT_BASIC_MANUF_NAME,
 	/*.model =*/ INIT_BASIC_MODEL_ID,
     },
+    .c4001{
+	.cmd_restart = {.cb = on_cmd_restart}
+    }
 };
 
 constinit static auto zb_ctx = zb::make_device(
@@ -156,6 +161,12 @@ void presence_triggered(const struct device *port,
 	//write latest state directly
 	dev_ctx.occupancy.occupancy = val;
     }
+}
+zb::CmdHandlingResult on_cmd_restart()
+{
+    printk("c4001::restart\r\n");
+    c4001::restart();
+    return {};
 }
 
 void send_on_off(uint8_t val)
@@ -321,11 +332,16 @@ int main(void)
     /* Register device context (endpoints). */
     ZB_AF_REGISTER_DEVICE_CTX(zb_ctx);
 
-    zigbee_enable();
     if (int err = configure_c4001_out_pin(); err != 0)
     {
 	printk("Failed to configure c4001 out pin\r\n");
     }
+    {
+	int val = gpio_pin_get_dt(&presence);
+	printk("Presence pin state: %d\r\n", val);
+	dev_ctx.occupancy.occupancy = val;
+    }
+    zigbee_enable();
 
     printk("Main: sleep forever\r\n");
     {
