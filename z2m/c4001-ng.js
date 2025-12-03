@@ -65,7 +65,7 @@ const orlangurC4001Extended = {
                 convert: (model, msg, publish, options, meta) => {
                     const result = {};
                     const data = msg.data;
-                    for (const attr in attributes) {
+                    for (const attr of attributes) {
                         if (data[attr] !== undefined) 
                             result[attr] = data[attr];
                     }
