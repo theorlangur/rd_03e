@@ -31,12 +31,13 @@ const orlangurC4001Extended = {
                 .withValueMax(25)
                 .withCategory('config'),
             e.numeric('detect_delay', ea.ALL)
-                .withLabel('Range From')
+                .withLabel('Detect Delay')
                 .withValueMin(0)
-                .withValueMax(20)
+                .withValueStep(0.1)
+                .withValueMax(2)
                 .withCategory('config'),
             e.numeric('clear_delay', ea.ALL)
-                .withLabel('Range To')
+                .withLabel('Clear Delay')
                 .withValueMin(0)
                 .withValueMax(20)
                 .withCategory('config'),
@@ -206,14 +207,13 @@ const definition = {
     configure: async (device, coordinatorEndpoint) => {
         const endpoint = device.getEndpoint(1);
         await reporting.bind(endpoint, coordinatorEndpoint, ['customStatus']);
-        await endpoint.read('c40001Config', ['range_min', 'range_max', 'range_trig'
-            , 'inhibit_duration'
+        await endpoint.read('c40001Config', ['range_min', 'range_max', 'range_trig']);
+        await endpoint.read('c40001Config', ['sw_ver', 'hw_ver']);
+        await endpoint.read('c40001Config', ['inhibit_duration'
             , 'sensitivity_detect' 
             , 'sensitivity_hold' 
             , 'detect_delay' 
             , 'clear_delay' 
-            , 'sw_ver' 
-            , 'hw_ver' 
         ]);
         await endpoint.read('customStatus', [ 'status1', 'status2', 'status3']);
 
