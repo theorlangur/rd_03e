@@ -124,14 +124,13 @@ constinit static auto &zb_ep = zb_ctx.ep<kMMW_EP>();
 /* Device defines                                                     */
 /**********************************************************************/
 /* The devicetree node identifier for the "led0" alias. */
-#define LED0_NODE DT_ALIAS(led0)
+#define LED0_NODE DT_ALIAS(userled0)
 
 /*
  * A build error on this line means your board is unsupported.
  * See the sample documentation for information on how to fix this.
  */
 static const struct gpio_dt_spec led = GPIO_DT_SPEC_GET(LED0_NODE, gpios);
-//constinit const struct device *rd_uart = DEVICE_DT_GET(DT_NODELABEL(uart30));
 
 ///* Get the node from the alias */
 #define SENSOR_NODE DT_ALIAS(presence)
@@ -301,7 +300,12 @@ int main(void)
     int err = settings_subsys_init();
     err = settings_load();
 
+    printk("main\r\n");
+    k_msleep(2000);
+
     pC4001 = c4001::setup(&on_c4001_error, &on_c4001_upd);
+    printk("pC4001\r\n");
+    k_msleep(2000);
     if (pC4001)
     {
 	dev_ctx.c4001.range_min = pC4001->GetRangeFrom();

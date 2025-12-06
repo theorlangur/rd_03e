@@ -8,6 +8,7 @@
 
 #include <nrf_general/lib_msgq_typed.hpp>
 
+#define DFR_UART_NODE DT_ALIAS(dfr_uart)
 
 namespace c4001
 {
@@ -20,7 +21,7 @@ namespace c4001
 	template<class... O>
 	overloaded(O... o)->overloaded<O...>;
     };
-    constinit const struct device *c4001_uart = DEVICE_DT_GET(DT_NODELABEL(uart30));
+    constinit const struct device *c4001_uart = DEVICE_DT_GET(DFR_UART_NODE);
     static dfr::C4001 c4001(c4001_uart);
 
     /**********************************************************************/

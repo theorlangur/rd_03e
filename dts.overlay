@@ -13,12 +13,15 @@
 	};
 
 	aliases {
-		led0 = &led0;
+		userled0 = &led0;
 		presence = &dfr_sensor_1;
+		dfr-uart = &uart30;
 	};
 
 	/* A standalone node describing your hardware */
     dfr_presence_sensor: presence_sensor {
+		/* gpios = <&gpio1 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>; */
+
 		compatible = "gpio-keys";
 		dfr_sensor_1: dfr_sensor_1{
 			gpios = <&gpio1 5 (GPIO_ACTIVE_HIGH | GPIO_PULL_DOWN)>;
